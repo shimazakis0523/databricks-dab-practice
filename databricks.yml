@@ -3,7 +3,7 @@ bundle:
   name: databricks-dab-practice
 
 include:
-  - jobs/*.yml
+  - resources/*.yml
 
 targets:
   dev:

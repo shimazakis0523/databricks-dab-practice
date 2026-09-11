@@ -8,7 +8,7 @@ Hello World を出力する Notebook を 1 つ用意し、それを実行する 
 ```
 .
 ├── databricks.yml              # バンドル定義（バンドル名 / ターゲット）
-├── jobs/
+├── resources/
 │   └── hello_world_job.yml     # Job 定義（Notebook を実行）
 └── notebooks/
     └── hello_world.py          # Hello World を出力する Notebook
