@@ -18,7 +18,53 @@ Hello World を出力する Notebook を 1 つ用意し、それを実行する 
 - Job: `hello_world_job` — タスク `hello_world_task` が上記 Notebook を実行
 - Free Edition はサーバーレスコンピュートのみ利用できるため、Job にクラスタ定義は含めていません
 
-## Databricks Free Edition へのデプロイ手順
+## デプロイ方法は2通り
+
+- **A. ワークスペース UI（Bundle エディタ）からデプロイ** — ローカルに何もインストール不要。おすすめ
+- **B. ローカル PC の Databricks CLI からデプロイ** — CI/CD や本番運用向け
+
+---
+
+## A. ワークスペース UI からデプロイする（Databricks Free Edition）
+
+ワークスペース上の **Git フォルダ** にこのリポジトリを取り込み、Bundle エディタから
+ターゲットの切り替え・デプロイ・実行まで行えます。ローカルへの CLI インストールは不要です。
+
+### 1. Git フォルダとしてリポジトリを取り込む
+
+1. ワークスペース左メニューの **Workspace** を開きます。
+2. 自分のユーザーフォルダで **Create > Git folder** を選択します。
+3. Git repository URL に `https://github.com/shimazakis0523/databricks-dab-practice` を入力します。
+4. Git provider が `GitHub` になっていることを確認し、**Create Git folder** をクリックします。
+5. 作成後、ブランチを `claude/upbeat-albattani-x2cbei`（または main にマージ済みならそのまま）に切り替えます。
+
+> プライベートリポジトリの場合は、事前に **Settings > Linked accounts** で GitHub の
+> パーソナルアクセストークンを登録しておく必要があります。
+
+### 2. Bundle エディタを開く
+
+Git フォルダ内の `databricks.yml` をクリックすると、バンドルとして認識され
+Bundle エディタが開きます。左側にバンドルのリソース（`hello_world_job`）が表示されます。
+
+### 3. ターゲットを選んでデプロイする
+
+1. エディタ右上のターゲット選択で **dev** を選びます。
+2. **Deploy** をクリックします。
+3. デプロイログが表示され、完了すると `[dev <ユーザー名>] hello_world_job` が作成されます。
+
+### 4. Job を実行する
+
+1. リソース一覧から `hello_world_job` を選び、**Run** をクリックします。
+2. 実行結果のセル出力に `Hello World` が表示されます。
+3. **ジョブとパイプライン** 画面からも実行履歴を確認できます。
+
+### 5. 変更を GitHub に戻す
+
+エディタ上で編集した内容は Git フォルダの UI（**Commit & push**）から GitHub に反映できます。
+
+---
+
+## B. ローカル PC の Databricks CLI からデプロイする
 
 ### 1. Free Edition のアカウントを作成する
 
