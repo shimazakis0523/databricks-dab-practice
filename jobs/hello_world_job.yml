@@ -1,0 +1,11 @@
+resources:
+  jobs:
+    hello_world_job:
+      name: hello_world_job
+
+      tasks:
+        - task_key: hello_world_task
+          notebook_task:
+            notebook_path: ../notebooks/hello_world.py
+          # Free Edition はサーバーレスコンピュートのみ利用可能なため
+          # job_clusters / existing_cluster_id は指定しない

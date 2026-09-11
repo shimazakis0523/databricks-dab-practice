@@ -1,0 +1,15 @@
+# Databricks Asset Bundles (DAB) 学習用プロジェクト
+bundle:
+  name: databricks-dab-practice
+
+include:
+  - jobs/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      # Databricks Free Edition のワークスペース URL に置き換えてください
+      # 例: https://dbc-xxxxxxxx-xxxx.cloud.databricks.com
+      host: https://<your-workspace>.cloud.databricks.com
