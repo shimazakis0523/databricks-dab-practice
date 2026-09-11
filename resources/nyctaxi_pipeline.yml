@@ -1,0 +1,11 @@
+resources:
+  pipelines:
+    nyctaxi_pipeline:
+      name: nyctaxi_pipeline
+      # Free Edition はサーバーレス実行のみ
+      serverless: true
+      catalog: workspace
+      schema: nyctaxi
+      libraries:
+        - notebook:
+            path: ../pipelines/nyctaxi_pipeline.py

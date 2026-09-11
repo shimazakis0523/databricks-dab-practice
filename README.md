@@ -1,22 +1,55 @@
 # databricks-dab-practice
 
 Databricks Asset Bundles (DAB) の学習用プロジェクトです。
-Hello World を出力する Notebook を 1 つ用意し、それを実行する Job を 1 つ DAB で管理します。
+Hello World を出力する Notebook と Job、および NYC タクシーデータのメダリオンパイプラインを DAB で管理します。
 
 ## 構成
 
 ```
 .
-├── databricks.yml              # バンドル定義（バンドル名 / ターゲット）
+├── databricks.yml                  # バンドル定義（バンドル名 / ターゲット）
 ├── resources/
-│   └── hello_world_job.yml     # Job 定義（Notebook を実行）
-└── notebooks/
-    └── hello_world.py          # Hello World を出力する Notebook
+│   ├── hello_world_job.yml         # Job 定義（Notebook を実行）
+│   └── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
+├── notebooks/
+│   └── hello_world.py              # Hello World を出力する Notebook
+└── pipelines/
+    └── nyctaxi_pipeline.py         # bronze / silver / gold を宣言する Python
 ```
 
-- Notebook: `notebooks/hello_world.py`（Databricks Notebook 形式の Python ファイル）
-- Job: `hello_world_job` — タスク `hello_world_task` が上記 Notebook を実行
-- Free Edition はサーバーレスコンピュートのみ利用できるため、Job にクラスタ定義は含めていません
+- Job: `hello_world_job` — タスク `hello_world_task` が `notebooks/hello_world.py` を実行
+- Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
+- Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
+
+## データパイプライン（nyctaxi_pipeline）
+
+Databricks に最初から用意されているサンプル `samples.nyctaxi.trips` を入力に、
+メダリオンアーキテクチャの3層を宣言的に定義しています。
+
+| レイヤ | テーブル | 内容 |
+| --- | --- | --- |
+| Bronze | `trips_bronze` | サンプルデータをそのまま取り込み |
+| Silver | `trips_silver` | 品質チェック（運賃・距離・時刻）で不正行を除外し、乗車時間と距離あたり運賃を付与 |
+| Gold | `trips_daily_gold` | 乗車日 × 乗車 ZIP ごとの件数・平均運賃・平均距離を集計 |
+
+- 出力先は `workspace.nyctaxi` スキーマ（`resources/nyctaxi_pipeline.yml` の `catalog` / `schema`）
+- 品質ルールは `@dlt.expect_all_or_drop` で定義。違反行は取り込まれず、パイプライン画面でドロップ件数を確認できます
+
+### 実行方法
+
+デプロイ後、Bundle resources から `nyctaxi_pipeline` を選んで **Run** すると全レイヤが更新されます。
+CLI の場合は以下です。
+
+```bash
+databricks bundle run nyctaxi_pipeline -t dev
+```
+
+実行後、カタログエクスプローラの `workspace > nyctaxi` に3つのテーブルが作成されます。
+SQL エディタから確認できます。
+
+```sql
+SELECT * FROM workspace.nyctaxi.trips_daily_gold ORDER BY trip_count DESC LIMIT 20;
+```
 
 ## デプロイ方法は2通り
 
