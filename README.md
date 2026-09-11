@@ -44,21 +44,22 @@ databricks --version
 ### 3. 認証を設定する
 
 ```bash
-databricks auth login --host https://<your-workspace>.cloud.databricks.com
+databricks auth login --host https://dbc-b1c4d17f-58d9.cloud.databricks.com
 ```
 
 ブラウザが開くので OAuth でログインします。プロファイル名を聞かれたら任意の名前
 （例: `free-edition`）を入力します。設定は `~/.databrickscfg` に保存されます。
 
-### 4. ワークスペース URL を設定する
+### 4. ワークスペース URL を確認する
 
-`databricks.yml` の `targets.dev.workspace.host` を、手順 1 で控えた自分のワークスペース URL に書き換えます。
+`databricks.yml` の `targets.dev.workspace.host` には、このプロジェクトで使う
+Free Edition のワークスペース URL を設定済みです。別のワークスペースを使う場合のみ書き換えてください。
 
 ```yaml
 targets:
   dev:
     workspace:
-      host: https://dbc-xxxxxxxx-xxxx.cloud.databricks.com
+      host: https://dbc-b1c4d17f-58d9.cloud.databricks.com
 ```
 
 ### 5. バンドルを検証する
