@@ -64,12 +64,13 @@ jobs:
         # デプロイが止まらないようにする（この bundle はサンプル/学習用データのみを扱う前提）。
         run: databricks bundle deploy -t dev --auto-approve
 
-      - name: Ensure workspace groups
+      - name: Ensure workspace groups and entitlements
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        # resources/groups.txt に列挙したグループを、なければ作成する。
+        # resources/groups.json に列挙したグループを作成し、entitlements を同期する。
         # Free Edition にはアカウントコンソール/SCIM 同期がないため、
-        # ワークスペースの SCIM Groups API を Databricks CLI 経由で叩いている
-        # （手動での Add group クリックを不要にするための自動化）。
-        run: ./scripts/ensure_groups.sh
+        # ワークスペースの SCIM Groups API を直接呼び出している
+        # （手動での Add group クリック・ユーザーごとの Entitlements トグルを
+        # 不要にし、グループ経由の継承だけでガバナンスを一本化するための自動化）。
+        run: python3 scripts/ensure_groups.py

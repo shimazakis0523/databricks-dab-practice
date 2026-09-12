@@ -2,7 +2,7 @@
 
 構成変更・機能拡張のたびに README.md の更新を忘れる、という事故の
 一次検知用。`resources/*.yml` / `pipelines/*.py` / `notebooks/*.py` /
-`tests/*.py` / `scripts/*.sh` のファイル名が README.md 本文のどこかに
+`tests/*.py` / `scripts/*.py` のファイル名が README.md 本文のどこかに
 出現しているかだけを確認する簡易チェックであり、記述内容の正しさまでは
 保証しない。
 
@@ -22,7 +22,7 @@ TRACKED_GLOBS = [
     "pipelines/*.py",
     "notebooks/*.py",
     "tests/*.py",
-    "scripts/*.sh",
+    "scripts/*.py",
 ]
 
 

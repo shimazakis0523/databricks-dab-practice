@@ -1,0 +1,13 @@
+{
+  "_comment": "このプロジェクトで使うワークスペースグループと、それぞれに付与する entitlements（ワークスペース機能へのアクセス権）の一覧。scripts/ensure_groups.sh がこれを読み、SCIM Groups API 経由でグループの作成・entitlements の同期を行う。グループ自体は DAB (Databricks Asset Bundles) では管理できないリソースのため、ここに定義を集約してコード（IaC）として可視化する。ユーザーごとの Entitlements トグル（ワークスペースの Add user 画面）は使わず、グループ経由での継承に統一することで、データ権限（nyctaxi_permissions_job の grants）とワークスペース機能権限（entitlements）のガバナンスを一本化している。",
+
+  "nyctaxi-data-engineers": {
+    "entitlements": ["workspace-access", "databricks-sql-access", "allow-cluster-create"]
+  },
+  "nyctaxi-analysts": {
+    "entitlements": ["workspace-access", "databricks-sql-access"]
+  },
+  "nyctaxi-viewers": {
+    "entitlements": ["workspace-access", "databricks-sql-access"]
+  }
+}

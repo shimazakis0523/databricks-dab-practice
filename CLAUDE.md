@@ -38,5 +38,10 @@ README を更新し忘れると CI が落ちる。
 - 「グループやユーザーは DAB / アカウントコンソールで管理できないから、手動作成でよい」
   で済ませない。Free Edition のようにアカウントコンソール・SCIM がない環境でも、
   ワークスペース単位の SCIM Groups API（`/api/2.0/preview/scim/v2/Groups`）を
-  `databricks api` 経由で叩けば自動化できる。`resources/groups.txt` +
-  `scripts/ensure_groups.sh` のパターン（CI の deploy ジョブから自動実行）を踏襲する。
+  直接叩けば自動化できる。`resources/groups.json` + `scripts/ensure_groups.py`
+  のパターン（CI の deploy ジョブから自動実行）を踏襲する。
+- ワークスペースの「Add user」画面にあるユーザーごとの entitlements トグル
+  （Workspace access / Databricks SQL access など）は、データ権限（grants）とは
+  別系統のガバナンスになりがちなので使わない。entitlements もグループに
+  設定し（`resources/groups.json` の `entitlements`）、ユーザーは
+  グループ経由で継承させることでガバナンスを一本化する。

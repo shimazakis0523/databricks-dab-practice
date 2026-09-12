@@ -20,7 +20,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
 | 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
 | 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）をコードで再現し権限を管理 | `resources/nyctaxi_permissions_job.yml`, `notebooks/grant_role_access.py` |
-| 10 | グループ作成そのものも手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.txt`, `scripts/ensure_groups.sh` |
+| 10 | グループ作成・entitlements 付与を手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.json`, `scripts/ensure_groups.py` |
 
 ## 全体構成図
 
@@ -91,9 +91,9 @@ flowchart TB
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 │   ├── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
 │   ├── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
-│   └── groups.txt                  # 作成すべきワークスペースグループの一覧
+│   └── groups.json                 # ワークスペースグループと entitlements の一覧
 ├── scripts/
-│   └── ensure_groups.sh            # groups.txt のグループを自動作成する（CI から実行）
+│   └── ensure_groups.py            # groups.json のグループ作成・entitlements 同期（CI から実行）
 ├── notebooks/
 │   ├── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
 │   └── grant_role_access.py        # 3ロールへの GRANT を発行する Notebook
@@ -233,34 +233,55 @@ pytest tests/ -v
 
 「組織のロール構成をコードで再現する」ことを検証するパートです。
 グループ自体もワークスペース UI で手動作成するのではなく、
-`resources/groups.txt` + `scripts/ensure_groups.sh` で自動作成しています。
+`resources/groups.json` + `scripts/ensure_groups.py` で自動作成しています。
 
 想定しているロールと、対応するグループ:
 
-| ロール | グループ名 | 権限 |
+| ロール | グループ名 | データ権限 |
 | --- | --- | --- |
 | データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） |
 | アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） |
 | 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） |
 
-### グループの自動作成（手動クリック不要）
+### グループの自動作成と entitlements の統一管理（手動クリック不要）
 
 Databricks Free Edition はアカウントコンソール・SCIM 同期・SSO が使えないため、
 `databricks account groups create` のようなアカウントレベルの CLI は使えない。
 その代わり、**ワークスペース単位の SCIM Groups API**
-（`/api/2.0/preview/scim/v2/Groups`）を Databricks CLI の汎用コマンド
-`databricks api` 経由で呼び出し、`resources/groups.txt` に列挙したグループが
-存在しなければ作成する、というスクリプトを用意した。
+（`/api/2.0/preview/scim/v2/Groups`）を直接呼び出し、
+`resources/groups.json` に列挙したグループを作成する。
 
-```bash
-DATABRICKS_HOST=... DATABRICKS_TOKEN=... ./scripts/ensure_groups.sh
+ワークスペースの **Add user** 画面には、ユーザーごとに
+`Workspace access` / `Databricks SQL access` / `Allow cluster create` などの
+**entitlements**（ワークスペース機能へのアクセス権）をトグルする UI がある。
+これをユーザーごとに個別設定すると、データ権限（グループの grants）とは
+**別系統のガバナンス**になってしまう。Databricks の entitlements は
+グループにも設定でき、メンバーはグループ経由で entitlements を継承するため、
+`resources/groups.json` にグループごとの entitlements もあわせて定義し、
+ユーザーは適切なグループに入れるだけで済むようにしている。
+
+```json
+{
+  "nyctaxi-analysts": {
+    "entitlements": ["workspace-access", "databricks-sql-access"]
+  }
+}
 ```
 
-- 何度実行しても安全（既に存在するグループはスキップする）
+```bash
+DATABRICKS_HOST=... DATABRICKS_TOKEN=... python3 scripts/ensure_groups.py
+```
+
+- グループが存在しなければ作成し、存在すれば entitlements を
+  `resources/groups.json` の内容に同期する（べき等。差分がなければ何もしない）
 - `.github/workflows/deploy.yml` の `deploy` ジョブで `bundle deploy` の直後に
-  自動実行される。つまり `main` へ push するだけで、コードに書いたグループが
-  ワークスペースに反映される
-- グループの一覧を変更したいときは `resources/groups.txt` を編集するだけでよい
+  自動実行される。つまり `main` へ push するだけで、コードに書いたグループと
+  entitlements がワークスペースに反映される
+- グループや entitlements を変更したいときは `resources/groups.json` を
+  編集するだけでよい
+- 新しいメンバーをオンボーディングする際に残る手動作業は
+  「そのユーザーを適切なグループに追加する」ことだけ（Free Edition には
+  SCIM/IdP 連携がないため、グループへのユーザー追加自体は自動化していない）
 
 ### なぜ DAB の `grants` ではなく SQL GRANT で管理しているか
 
@@ -426,7 +447,7 @@ databricks bundle destroy -t dev
 - Pull Request 作成時・`main` への push 時: `pytest tests/`（ユニットテスト）と
   `databricks bundle validate -t dev`（バンドルの構文・参照チェック）を並行実行
 - `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev --auto-approve` を実行して自動デプロイし、
-  続けて `scripts/ensure_groups.sh` で `resources/groups.txt` のグループを自動作成
+  続けて `scripts/ensure_groups.py` で `resources/groups.json` のグループ・entitlements を自動同期
 
 `deploy` ジョブは `test` と `validate` の両方に依存しているため、
 ユニットテストが落ちていればデプロイは走りません。
