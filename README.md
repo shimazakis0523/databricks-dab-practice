@@ -3,6 +3,80 @@
 Databricks Asset Bundles (DAB) の学習用プロジェクトです。
 NYC タクシーデータのメダリオンパイプラインを DAB で管理します。
 
+## このプロジェクトで検証している POC
+
+「Databricks Asset Bundles でデータ基盤をコードとして管理し、
+GitHub への push だけで検証環境にデプロイまで到達させる」ことを主眼に、
+以下の要素を一通り実装・検証しています。
+
+| # | 検証項目 | 実装箇所 |
+| --- | --- | --- |
+| 1 | DAB による Job / Pipeline / Volume / Schema 参照の宣言的管理（IaC） | `databricks.yml`, `resources/*.yml` |
+| 2 | メダリオンアーキテクチャ（bronze → silver → gold）を Lakeflow Declarative Pipelines で構築 | `pipelines/nyctaxi_pipeline.py` |
+| 3 | 実務で多いパターン（外部システムがストレージに CSV を置く）を Auto Loader で増分取り込み | `trips_bronze`, ランディング Volume |
+| 4 | ファイル到着をトリガーにした自動実行（固定スケジュールではなくイベント駆動） | `nyctaxi_job` の File arrival トリガー |
+| 5 | GitHub Actions による CI/CD（テスト → validate → deploy の自動化） | `.github/workflows/deploy.yml` |
+| 6 | Databricks 実行環境に依存しない変換ロジックの単体テスト | `pipelines/transforms.py`, `tests/test_transforms.py` |
+| 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
+
+## 全体構成図
+
+```mermaid
+flowchart TB
+    subgraph GitHub["GitHub リポジトリ"]
+        Push["main への push"]
+    end
+
+    subgraph CI["GitHub Actions (.github/workflows/deploy.yml)"]
+        Test["test\npytest tests/"]
+        Validate["validate\ndatabricks bundle validate"]
+        Deploy["deploy\ndatabricks bundle deploy --auto-approve"]
+        Test --> Deploy
+        Validate --> Deploy
+    end
+
+    subgraph DBX["Databricks ワークスペース (Free Edition)"]
+        subgraph Landing["ランディングゾーン"]
+            Volume["Volume\n/Volumes/workspace/nyctaxi/landing"]
+        end
+
+        SeedJob["Job: nyctaxi_seed_job\n(手動実行)\nsamples.nyctaxi.trips から\nCSV を生成"]
+
+        subgraph Pipeline["Pipeline: nyctaxi_pipeline (Lakeflow Declarative Pipelines)"]
+            Bronze["trips_bronze\n(Streaming Table)\nAuto Loader で CSV を増分取り込み\n※文字列のまま"]
+            Silver["trips_silver\n(Materialized View)\n型変換 + 品質チェック\n+ 乗車時間/距離あたり運賃"]
+            Gold["trips_daily_gold\n(Materialized View)\n日次 x 乗車ZIP で集計"]
+            Bronze --> Silver --> Gold
+        end
+
+        NyctaxiJob["Job: nyctaxi_job\nFile arrival トリガー"]
+    end
+
+    Push --> Test
+    Push --> Validate
+    Deploy -->|"bundle deploy"| DBX
+
+    SeedJob -->|"CSV 書き込み"| Volume
+    Volume -.->|"新規ファイル到着を検知"| NyctaxiJob
+    NyctaxiJob -->|"pipeline_task"| Pipeline
+    Volume -->|"Auto Loader\ncloudFiles"| Bronze
+```
+
+### データの流れ（実行時）
+
+1. `nyctaxi_seed_job` を実行 → `samples.nyctaxi.trips` から一部を抜き出し CSV としてランディングゾーン（Volume）へ書き出す
+2. Volume に新しい CSV が届いたことを **File arrival トリガー** が検知し、`nyctaxi_job` を自動起動
+3. `nyctaxi_job` が `nyctaxi_pipeline` を起動
+4. `trips_bronze`（Auto Loader）が未取り込みの CSV だけを増分で読み込む（文字列のまま）
+5. `trips_silver` が型変換・品質チェックを行い、乗車時間や距離あたり運賃を付与
+6. `trips_daily_gold` が日次 × 乗車 ZIP で集計
+
+### デプロイの流れ（コード変更時）
+
+1. `resources/*.yml` や `pipelines/*.py` を編集して `main` に push
+2. GitHub Actions が `pytest`（ユニットテスト）と `databricks bundle validate` を実行
+3. 両方が通れば `databricks bundle deploy --auto-approve` でワークスペースに反映
+
 ## 構成
 
 ```
