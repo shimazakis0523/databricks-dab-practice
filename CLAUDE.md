@@ -129,6 +129,25 @@ README を更新し忘れると CI が落ちる。
   機械的にチェックする。新しく「手動 Job でしか作られないものを参照する
   リソース」を追加する場合は、同テストの `BLOCKING_RESOURCE_TYPES` に
   リソース種別を追記すること。
+- **`mlflow.pyfunc.log_model()` はモデル登録直後に「入力例に対する予測」を
+  自動実行して検証する（＝登録時の Notebook 環境で一度 `predict()` が
+  呼ばれる）。** `agents/gold_qa_responses_agent.py` の `load_context` は
+  `DATABRICKS_HOST` / `DATABRICKS_TOKEN` を環境変数から読むが、これは
+  本来 Model Serving 側の `environment_vars`（`templates/gold_qa_agent_serving.yml`）
+  からのみ渡す想定で書いており、登録時の Notebook にこれらの環境変数が
+  無いことを見落としていた。実際に `gold_qa_agent_registration_job` を
+  実行したところ `KeyError: 'DATABRICKS_HOST'` で登録が失敗した。
+  根本原因は、「モデルが環境変数を読む」という実装を、それが実際に
+  呼ばれるすべてのタイミング・環境（今回で言えば「登録時の自動検証」と
+  「Serving 時」の2つ）で洗い出せていなかったこと。
+  `notebooks/register_gold_qa_agent.py` では、`log_model` を呼ぶ前に
+  Notebook 自身の実行コンテキスト（`spark.databricks.workspaceUrl` /
+  `dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken()`）
+  から同じ環境変数を設定することで対処した（副次的に、登録時点で
+  Foundation Model API を実際に1回呼ぶ簡易スモークテストにもなる）。
+  今後、モデル/エージェントが環境変数や外部認証情報に依存するコードを
+  書く場合は、「登録時の自動検証」「Serving 時」「（あれば）ローカル
+  テスト時」の全タイミングでその変数が用意されているかを確認すること。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
   pytest テストする（`nyctaxi_pipeline.py` 自体は Databricks 実行環境でしか

@@ -63,6 +63,19 @@ gold_context_path = "/tmp/gold_qa_agent_context.txt"
 with open(gold_context_path, "w", encoding="utf-8") as f:
     f.write(gold_context_text)
 
+# mlflow.pyfunc.log_model() は登録直後に「入力例に対する予測」を自動実行して
+# 検証する。GoldQAResponsesAgent.load_context は DATABRICKS_HOST/TOKEN を
+# 環境変数から読むが、これらは本来 Model Serving 側の environment_vars から
+# 渡す想定で、登録時のこの Notebook 環境には無い。そのままだと検証の predict()
+# 呼び出しで KeyError になり登録自体が失敗するため、Notebook 自身の実行コンテキスト
+# から一時的に同じ環境変数を設定しておく。これはついでに、登録時点で実際に
+# Foundation Model API を1回呼び出す形になり、エージェント全体の簡易的な
+# スモークテストにもなる。
+os.environ["DATABRICKS_HOST"] = "https://" + spark.conf.get("spark.databricks.workspaceUrl")
+os.environ["DATABRICKS_TOKEN"] = (
+    dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().getOrElse(None)
+)
+
 mlflow.set_registry_uri("databricks-uc")
 
 with mlflow.start_run(run_name="gold_qa_agent"):

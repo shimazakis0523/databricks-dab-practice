@@ -143,7 +143,8 @@ flowchart TB
 │   ├── test_no_hardcoded_workspace_values.py  # databricks.yml へのワークスペース URL 直書きチェック（再発防止）
 │   ├── test_dashboard_conventions.py  # lvdash.json の Lakeview 規約違反チェック（再発防止）
 │   ├── test_gold_qa_agent.py          # gold_qa_agent.py のプロンプト構築ロジックのユニットテスト
-│   └── test_no_blocking_model_serving_dependency.py  # resources/*.yml が手動 Job 依存のリソースを含まないことのチェック（再発防止）
+│   ├── test_no_blocking_model_serving_dependency.py  # resources/*.yml が手動 Job 依存のリソースを含まないことのチェック（再発防止）
+│   └── test_register_notebook_sets_agent_env_vars.py  # 登録 Notebook が log_model 前に環境変数を設定していることのチェック（再発防止）
 ├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 └── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
@@ -493,6 +494,14 @@ Foundation Model API の実際の挙動をこのセッションからライブ�
 エラーが出た場合は、Lakeview ダッシュボードのときと同じ方針
 （推測ではなく実際の Databricks/MLflow のログ・エラーメッセージ、および
 GitHub 上の実例で確認したうえで修正する）で対応する。
+
+実際に一度、`gold_qa_agent_registration_job` の実行が
+`KeyError: 'DATABRICKS_HOST'` で失敗したことがある。原因は
+`mlflow.pyfunc.log_model()` が登録直後に「入力例に対する予測」を自動実行して
+検証するため、`load_context` が読む環境変数が登録時の Notebook 環境に
+無かったこと。`notebooks/register_gold_qa_agent.py` で `log_model` 呼び出し
+前に Notebook 自身の認証情報から同じ環境変数を設定するよう修正済み
+（`tests/test_register_notebook_sets_agent_env_vars.py` で再発防止）。
 
 ## 組織/権限管理（ロールベースアクセス）
 
