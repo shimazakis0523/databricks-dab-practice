@@ -120,7 +120,8 @@ flowchart TB
 │   ├── test_resource_conventions.py   # resources/*.yml の命名規則チェック（再発防止）
 │   ├── test_readme_sync.py            # README.md のファイル記載漏れチェック（再発防止）
 │   ├── test_groups_json_sync.py       # groups.json の entitlements 値の転記漏れチェック（再発防止）
-│   └── test_no_hardcoded_workspace_values.py  # databricks.yml へのワークスペース URL 直書きチェック（再発防止）
+│   ├── test_no_hardcoded_workspace_values.py  # databricks.yml へのワークスペース URL 直書きチェック（再発防止）
+│   └── test_dashboard_conventions.py  # lvdash.json の Lakeview 規約違反チェック（再発防止）
 ├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 └── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
@@ -301,10 +302,18 @@ resources:
   現在の運用では `mode: development` を使っていないため接頭辞は付かない）
   を開いて確認する
 
-`.lvdash.json` はコードから手書きしたものであり、実際にワークスペースへ
-デプロイして初めてウィジェットの表示が正しいか確認できる。デプロイ時に
-スキーマエラーが出た場合は、`databricks bundle deploy` のエラーメッセージに
-従ってウィジェット定義を修正すること。
+`.lvdash.json` はコードから手書きしたものであり、`databricks bundle validate`
+は JSON の構文しかチェックしないため、実際にワークスペースへデプロイして
+初めてウィジェットの表示が正しいか確認できる。過去に、単一クエリウィジェットの
+`queries[].name` を任意の名前にしていたため実ワークスペースで
+`Missing query "main_query"` エラーになり、table ウィジェットの
+`encodings.columns` に `type` を指定していなかったため
+`Invalid widget definition is imported` エラーになったことがある
+（`queries[].name` は固定で `main_query` にする必要があり、`type` は
+必須フィールド）。これらの既知の規約違反は `tests/test_dashboard_conventions.py`
+で機械的にチェックしている。それ以外の描画エラーが出た場合は、
+`databricks bundle deploy` のエラーメッセージに従ってウィジェット定義を
+修正し、同テストに規約を追記すること。
 
 ## 組織/権限管理（ロールベースアクセス）
 

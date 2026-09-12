@@ -16,7 +16,7 @@
             "name": "total_trips_counter",
             "queries": [
               {
-                "name": "total_trips_query",
+                "name": "main_query",
                 "query": {
                   "datasetName": "trips_daily_gold_ds",
                   "fields": [
@@ -51,7 +51,7 @@
             "name": "daily_trips_line",
             "queries": [
               {
-                "name": "daily_trips_query",
+                "name": "main_query",
                 "query": {
                   "datasetName": "trips_daily_gold_ds",
                   "fields": [
@@ -96,7 +96,7 @@
             "name": "avg_fare_by_zip_bar",
             "queries": [
               {
-                "name": "avg_fare_by_zip_query",
+                "name": "main_query",
                 "query": {
                   "datasetName": "trips_daily_gold_ds",
                   "fields": [
@@ -141,7 +141,7 @@
             "name": "daily_gold_table",
             "queries": [
               {
-                "name": "daily_gold_table_query",
+                "name": "main_query",
                 "query": {
                   "datasetName": "trips_daily_gold_ds",
                   "fields": [
@@ -161,12 +161,66 @@
               "widgetType": "table",
               "encodings": {
                 "columns": [
-                  { "fieldName": "pickup_date", "displayName": "乗車日" },
-                  { "fieldName": "pickup_zip", "displayName": "乗車ZIP" },
-                  { "fieldName": "trip_count", "displayName": "件数" },
-                  { "fieldName": "avg_fare", "displayName": "平均運賃" },
-                  { "fieldName": "avg_distance", "displayName": "平均距離" },
-                  { "fieldName": "avg_trip_minutes", "displayName": "平均乗車時間(分)" }
+                  {
+                    "fieldName": "pickup_date",
+                    "type": "datetime",
+                    "displayAs": "datetime",
+                    "visible": true,
+                    "order": 0,
+                    "title": "乗車日",
+                    "alignContent": "left",
+                    "allowHTML": false
+                  },
+                  {
+                    "fieldName": "pickup_zip",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 1,
+                    "title": "乗車ZIP",
+                    "alignContent": "left",
+                    "allowHTML": false
+                  },
+                  {
+                    "fieldName": "trip_count",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 2,
+                    "title": "件数",
+                    "alignContent": "right",
+                    "allowHTML": false
+                  },
+                  {
+                    "fieldName": "avg_fare",
+                    "type": "decimal",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 3,
+                    "title": "平均運賃",
+                    "alignContent": "right",
+                    "allowHTML": false
+                  },
+                  {
+                    "fieldName": "avg_distance",
+                    "type": "decimal",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 4,
+                    "title": "平均距離",
+                    "alignContent": "right",
+                    "allowHTML": false
+                  },
+                  {
+                    "fieldName": "avg_trip_minutes",
+                    "type": "decimal",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 5,
+                    "title": "平均乗車時間(分)",
+                    "alignContent": "right",
+                    "allowHTML": false
+                  }
                 ]
               },
               "frame": {

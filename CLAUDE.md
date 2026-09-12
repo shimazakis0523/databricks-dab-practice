@@ -66,6 +66,15 @@ README を更新し忘れると CI が落ちる。
   `catalog_name` / `schema_name`）は文字列リテラルで統一する。理由と経緯は
   README の「開発時の注意点」を参照。`tests/test_resource_conventions.py`
   がこれも機械的にチェックする。
+- Lakeview ダッシュボード（`dashboards/*.lvdash.json`）は `databricks bundle
+  validate` では JSON 構文しか検証されず、Lakeview 固有のスキーマ規約
+  （例: 単一クエリウィジェットの `queries[].name` は固定で `main_query` に
+  する必要がある、table ウィジェットの `encodings.columns` には `type` が
+  必須、など）は実際にワークスペースへデプロイしてレンダリングするまで
+  検知できない。手書きで `.lvdash.json` を追加・変更した場合は、既知の
+  規約違反を機械的にチェックする `tests/test_dashboard_conventions.py` を
+  必ず通し、実ワークスペースでの表示確認をユーザーに依頼すること。新しい
+  描画エラーに遭遇したら、その規約を同テストに追記して再発を防ぐ。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
   pytest テストする（`nyctaxi_pipeline.py` 自体は Databricks 実行環境でしか
