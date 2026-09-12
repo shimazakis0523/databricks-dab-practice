@@ -93,14 +93,19 @@ trigger:
 - `min_time_between_triggers_seconds`: 短時間に何度もファイルが来ても、この間隔以上空けてから起動する
 - `wait_after_last_change_seconds`: 最後のファイル変更からこの秒数だけ待ってから起動する（書き込み完了を待つため）
 
-> **注意**: `mode: development` は既定でスケジュール/トリガーを一時停止（PAUSED）状態で
-> デプロイする。DAB が管理する Job はワークスペース UI から直接 Resume できない
+> **注意**: `mode: development` はスケジュール/トリガーを常に一時停止（PAUSED）状態で
+> デプロイする（`presets.trigger_pause_status: UNPAUSED` で解除しようとしても
+> `target with 'mode: development' cannot set trigger pause status to UNPAUSED by default`
+> というエラーで拒否される、意図した安全装置）。加えて DAB が管理する Job は
+> ワークスペース UI からも直接 Resume できない
 > （「Connected to Declarative Automation Bundles」と表示され、`Edit trigger` /
-> `Resume` / `Delete` が非活性になる）ため、`databricks.yml` の `dev` ターゲットに
-> `presets.trigger_pause_status: UNPAUSED` を設定してデプロイ時から有効化した状態にしている。
+> `Resume` / `Delete` が非活性になる）。
 >
-> 有効化すると、ファイルが届くたびにサーバーレスが起動して実行されるため、
-> `nyctaxi_seed_job` を連続実行するとサーバーレス枠を早く消費する点に注意すること。
+> そのため `dev` ターゲット（`mode: development`）では File arrival トリガーは
+> 常に一時停止のままで、自動起動は確認できない。実際に自動起動させたい場合は、
+> `mode: development` を使わない別ターゲット（例: 本番相当の `prod` ターゲット）を
+> 用意してそちらにデプロイする必要がある。学習用のこのバンドルでは
+> `nyctaxi_pipeline` / `nyctaxi_job` を手動 Run する運用にとどめている。
 
 実行後、カタログエクスプローラの `workspace > nyctaxi` に3つのテーブルが作成されます。
 SQL エディタから確認できます。

@@ -9,10 +9,6 @@ targets:
   dev:
     mode: development
     default: true
-    # mode: development は既定でスケジュール/トリガーを一時停止(PAUSED)状態にする。
-    # nyctaxi_job の File arrival トリガーを学習用に動かしたいので、ここで解除する。
-    presets:
-      trigger_pause_status: UNPAUSED
     workspace:
       # Databricks Free Edition ワークスペース
       host: https://dbc-b1c4d17f-58d9.cloud.databricks.com
