@@ -15,7 +15,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipelines"))
 
-from transforms import QUALITY_EXPECTATIONS, add_trip_metrics, aggregate_daily  # noqa: E402
+from transforms import (  # noqa: E402
+    QUALITY_EXPECTATIONS,
+    add_trip_metrics,
+    aggregate_daily,
+    cast_raw_trip_columns,
+)
 
 RAW_COLUMNS = [
     "tpep_pickup_datetime",
@@ -34,6 +39,34 @@ def make_trip(pickup, dropoff, fare_amount, trip_distance, pickup_zip=10001):
         trip_distance,
         pickup_zip,
     )
+
+
+CSV_STRING_COLUMNS = [
+    "tpep_pickup_datetime",
+    "tpep_dropoff_datetime",
+    "fare_amount",
+    "trip_distance",
+    "pickup_zip",
+    "dropoff_zip",
+]
+
+
+def test_cast_raw_trip_columns_converts_csv_strings_to_typed_columns(spark):
+    # Auto Loader が CSV から取り込んだ直後は、すべて文字列カラムになっている。
+    rows = [
+        ("2026-01-01 10:00:00", "2026-01-01 10:15:00", "30.0", "5.0", "10001", "10002"),
+    ]
+    df = spark.createDataFrame(rows, CSV_STRING_COLUMNS)
+    assert dict(df.dtypes)["fare_amount"] == "string"
+
+    result = cast_raw_trip_columns(df).collect()[0]
+
+    assert result["tpep_pickup_datetime"] == datetime.fromisoformat("2026-01-01T10:00:00")
+    assert result["tpep_dropoff_datetime"] == datetime.fromisoformat("2026-01-01T10:15:00")
+    assert result["fare_amount"] == pytest.approx(30.0)
+    assert result["trip_distance"] == pytest.approx(5.0)
+    assert result["pickup_zip"] == 10001
+    assert result["dropoff_zip"] == 10002
 
 
 def test_add_trip_metrics_computes_expected_values(spark):

@@ -19,6 +19,32 @@ QUALITY_EXPECTATIONS = {
     "valid_period": "tpep_dropoff_datetime > tpep_pickup_datetime",
 }
 
+# CSV から Auto Loader で取り込んだ直後の列は、すべて文字列型になっている。
+RAW_STRING_COLUMNS = [
+    "tpep_pickup_datetime",
+    "tpep_dropoff_datetime",
+    "fare_amount",
+    "trip_distance",
+    "pickup_zip",
+    "dropoff_zip",
+]
+
+
+def cast_raw_trip_columns(df: DataFrame) -> DataFrame:
+    """CSV 由来の文字列カラムを、それぞれ適切な型にキャストする。
+
+    Auto Loader は CSV を既定でノーヒント（すべて文字列）で取り込むため、
+    Bronze はそのまま素通しし、Silver に入る手前でこの関数を通して型を確定させる。
+    """
+    return (
+        df.withColumn("tpep_pickup_datetime", F.to_timestamp("tpep_pickup_datetime"))
+        .withColumn("tpep_dropoff_datetime", F.to_timestamp("tpep_dropoff_datetime"))
+        .withColumn("fare_amount", F.col("fare_amount").cast("double"))
+        .withColumn("trip_distance", F.col("trip_distance").cast("double"))
+        .withColumn("pickup_zip", F.col("pickup_zip").cast("int"))
+        .withColumn("dropoff_zip", F.col("dropoff_zip").cast("int"))
+    )
+
 
 def add_trip_metrics(df: DataFrame) -> DataFrame:
     """乗車日・乗車時間(分)・距離あたり運賃の列を付与する。"""

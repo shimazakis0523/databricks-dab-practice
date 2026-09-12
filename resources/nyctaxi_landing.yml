@@ -1,0 +1,17 @@
+resources:
+  schemas:
+    nyctaxi_schema:
+      name: nyctaxi
+      catalog_name: workspace
+      comment: NYC タクシーパイプラインの出力先 & ランディングゾーン用スキーマ
+
+  volumes:
+    nyctaxi_landing:
+      name: landing
+      catalog_name: workspace
+      # 同じ「nyctaxi」スキーマを共有する（パイプライン側は文字列 "nyctaxi" で直接参照）
+      schema_name: ${resources.schemas.nyctaxi_schema.name}
+      volume_type: MANAGED
+      comment: >-
+        外部システムが CSV を配置するランディングゾーン。
+        Auto Loader (nyctaxi_pipeline の trips_bronze) がここを増分で取り込む。

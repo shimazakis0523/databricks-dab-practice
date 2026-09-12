@@ -10,12 +10,15 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 ├── databricks.yml                  # バンドル定義（バンドル名 / ターゲット）
 ├── resources/
 │   ├── hello_world_job.yml         # Job 定義（Notebook を実行）
+│   ├── nyctaxi_landing.yml         # スキーマ + ランディング用 Volume 定義
 │   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
-│   └── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
+│   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
+│   └── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
 ├── notebooks/
-│   └── hello_world.py              # Hello World を出力する Notebook
+│   ├── hello_world.py              # Hello World を出力する Notebook
+│   └── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
 ├── pipelines/
-│   ├── nyctaxi_pipeline.py         # bronze / silver / gold を宣言する Python（dlt 依存）
+│   ├── nyctaxi_pipeline.py         # bronze(Auto Loader) / silver / gold を宣言する Python（dlt 依存）
 │   └── transforms.py               # 変換ロジック本体（純粋関数、pytest でテスト可能）
 ├── tests/
 │   ├── conftest.py                 # ローカル SparkSession フィクスチャ
@@ -26,31 +29,46 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 - Job: `hello_world_job` — タスク `hello_world_task` が `notebooks/hello_world.py` を実行
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
 - Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（毎日 6:00 JST）
+- Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
 
-Databricks に最初から用意されているサンプル `samples.nyctaxi.trips` を入力に、
-メダリオンアーキテクチャの3層を宣言的に定義しています。
+実際の現場でよくある「外部システムがストレージに CSV を置き、それを増分で取り込む」
+という構成を、Unity Catalog Volume と Auto Loader で再現しています。
+入力データ自体は `samples.nyctaxi.trips`（Databricks に最初から用意されているサンプル）から
+CSV として書き出したものです。
 
 | レイヤ | テーブル | 内容 |
 | --- | --- | --- |
-| Bronze | `trips_bronze` | サンプルデータをそのまま取り込み |
-| Silver | `trips_silver` | 品質チェック（運賃・距離・時刻）で不正行を除外し、乗車時間と距離あたり運賃を付与 |
+| Bronze | `trips_bronze` | Auto Loader (`cloudFiles`) で landing volume の CSV を増分取り込み（すべて文字列） |
+| Silver | `trips_silver` | 文字列カラムを型変換し、品質チェック（運賃・距離・時刻）で不正行を除外。乗車時間と距離あたり運賃を付与 |
 | Gold | `trips_daily_gold` | 乗車日 × 乗車 ZIP ごとの件数・平均運賃・平均距離を集計 |
 
 - 出力先は `workspace.nyctaxi` スキーマ（`resources/nyctaxi_pipeline.yml` の `catalog` / `schema`）
+- ランディングゾーンは `resources/nyctaxi_landing.yml` で定義する Volume
+  `/Volumes/workspace/nyctaxi/landing`（スキーマ自体も DAB のリソースとして管理）
 - 品質ルールは `@dlt.expect_all_or_drop` で定義。違反行は取り込まれず、パイプライン画面でドロップ件数を確認できます
+- CSV は Auto Loader の既定動作どおり、いったんすべて文字列として Bronze に入り、
+  Silver に渡す前に `cast_raw_trip_columns`（`pipelines/transforms.py`）で型変換します
 
 ### 実行方法
 
-デプロイ後、Bundle resources から `nyctaxi_pipeline` を選んで **Run** すると全レイヤが更新されます。
-パイプラインを起動する Job `nyctaxi_job` も用意してあるので、そちらを **Run** しても同じ結果になります。
+1. **CSV を投入する** — `nyctaxi_seed_job` を **Run**。`samples.nyctaxi.trips` から
+   2,000 件を抜き出し、4 ファイルに分けてランディングゾーンへ CSV として書き出します。
+2. **パイプラインを実行する** — `nyctaxi_pipeline`（または `nyctaxi_job`）を **Run**。
+   Auto Loader がランディングゾーンの CSV を取り込み、bronze → silver → gold を更新します。
 
 ```bash
+databricks bundle run nyctaxi_seed_job -t dev   # CSV をランディングゾーンへ投入
 databricks bundle run nyctaxi_pipeline -t dev   # パイプラインを直接実行
 databricks bundle run nyctaxi_job -t dev        # Job 経由で実行
 ```
+
+`nyctaxi_seed_job` をもう一度 **Run** すると、ランディングゾーンに新しい CSV が
+追加で書き込まれます。その状態で `nyctaxi_pipeline` を再実行すると、
+Auto Loader が「前回取り込み済みのファイルはスキップし、新しいファイルだけを取り込む」
+様子を確認できます（bronze テーブルの行数が差分だけ増える）。
 
 `nyctaxi_job` は `pipeline_task` でパイプライン ID を参照しており、
 ID はバンドルのデプロイ時に `${resources.pipelines.nyctaxi_pipeline.id}` で自動解決されます。
@@ -68,22 +86,28 @@ SELECT * FROM workspace.nyctaxi.trips_daily_gold ORDER BY trip_count DESC LIMIT 
 
 `dlt` モジュールは Databricks の Lakeflow Declarative Pipelines 実行環境でしか
 import できないため、`nyctaxi_pipeline.py` そのものは手元や CI で直接テストできません。
-そこで変換ロジック（乗車時間・距離あたり運賃の計算、品質ルール、日次集計）を
+そこで変換ロジック（型変換、乗車時間・距離あたり運賃の計算、品質ルール、日次集計）を
 `pipelines/transforms.py` に純粋関数として切り出し、`nyctaxi_pipeline.py` からは
 通常の Python import で参照する構成にしています。
 
 ```python
 # nyctaxi_pipeline.py
-from transforms import QUALITY_EXPECTATIONS, add_trip_metrics, aggregate_daily
+from transforms import (
+    QUALITY_EXPECTATIONS,
+    add_trip_metrics,
+    aggregate_daily,
+    cast_raw_trip_columns,
+)
 ```
 
 Lakeflow Declarative Pipelines はパイプラインのルートディレクトリを自動的に
 `sys.path` へ追加するため、この import はデプロイ後もそのまま動作します
 （`resources/nyctaxi_pipeline.yml` の `libraries` は `glob` で
-`pipelines/*.py` をまとめて配置しています）。
+`pipelines/**` をまとめて配置しています）。
 
 `pipelines/transforms.py` は `tests/test_transforms.py` からローカルの PySpark で
-テストできます。
+テストできます（CSV 由来の文字列カラムを `cast_raw_trip_columns` が正しく型変換するか、
+といったケースも含みます）。
 
 ```bash
 pip install -r requirements-test.txt

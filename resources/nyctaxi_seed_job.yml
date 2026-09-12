@@ -1,0 +1,10 @@
+resources:
+  jobs:
+    nyctaxi_seed_job:
+      name: nyctaxi_seed_job
+      # スケジュールなし。ランディングゾーンに CSV を投入したいときに手動 Run する。
+      # 実行するたびにファイルが追加され、Auto Loader の増分取り込みを確認できる。
+      tasks:
+        - task_key: seed_csv
+          notebook_task:
+            notebook_path: ../notebooks/seed_nyctaxi_csv.py
