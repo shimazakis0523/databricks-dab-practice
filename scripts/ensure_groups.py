@@ -20,34 +20,10 @@ from __future__ import annotations
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
+
+from scim_client import GROUPS_PATH, call_api, find_group_by_name
 
 GROUPS_FILE = os.path.join(os.path.dirname(__file__), "..", "resources", "groups.json")
-SCIM_GROUPS_PATH = "/api/2.0/preview/scim/v2/Groups"
-
-
-def call_api(host: str, token: str, method: str, path: str, body: dict | None = None) -> dict:
-    url = f"{host.rstrip('/')}{path}"
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    request = urllib.request.Request(url, data=data, method=method)
-    request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("Content-Type", "application/scim+json")
-    try:
-        with urllib.request.urlopen(request) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {path} failed: HTTP {error.code}: {detail}") from error
-
-
-def find_group(host: str, token: str, name: str) -> dict | None:
-    query = urllib.parse.quote(f'displayName eq "{name}"')
-    result = call_api(host, token, "GET", f"{SCIM_GROUPS_PATH}?filter={query}")
-    resources = result.get("Resources", [])
-    return resources[0] if resources else None
 
 
 def create_group(host: str, token: str, name: str, entitlement_values: list[str]) -> None:
@@ -55,7 +31,7 @@ def create_group(host: str, token: str, name: str, entitlement_values: list[str]
         host,
         token,
         "POST",
-        SCIM_GROUPS_PATH,
+        GROUPS_PATH,
         {
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
             "displayName": name,
@@ -69,7 +45,7 @@ def sync_entitlements(host: str, token: str, group_id: str, entitlement_values: 
         host,
         token,
         "PATCH",
-        f"{SCIM_GROUPS_PATH}/{group_id}",
+        f"{GROUPS_PATH}/{group_id}",
         {
             "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
             "Operations": [
@@ -93,7 +69,7 @@ def main() -> int:
 
     for name, config in groups.items():
         desired = sorted(config.get("entitlements", []))
-        existing = find_group(host, token, name)
+        existing = find_group_by_name(host, token, name)
 
         if existing is None:
             print(f"[ensure_groups] '{name}' を作成します（entitlements: {desired}）。")

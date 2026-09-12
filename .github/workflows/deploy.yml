@@ -74,3 +74,23 @@ jobs:
         # （手動での Add group クリック・ユーザーごとの Entitlements トグルを
         # 不要にし、グループ経由の継承だけでガバナンスを一本化するための自動化）。
         run: python3 scripts/ensure_groups.py
+
+      - name: Audit groups not declared in IaC (report only for now)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        # resources/groups.json に無いグループは「あってはならない存在」として
+        # 検知する。ただし admins / users は Databricks のシステム予約グループ
+        # として常に保護する（スクリプト内でハードコード）。
+        # 現状は --dry-run（検知のみ・実削除なし）で運用している。実削除を
+        # 有効にする場合は --dry-run を外すこと（README/CLAUDE.md 参照）。
+        run: python3 scripts/audit_undeclared_groups.py --dry-run
+
+      - name: Audit direct user entitlements (report only)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        # グループ経由ではない、ユーザーへの直接 entitlements 付与を検知して
+        # ログに出す（自動修正はしない。誤検知でオーナー自身の権限を
+        # 落とさないよう、このステップは常に成功扱いにする）。
+        run: python3 scripts/audit_user_entitlements.py

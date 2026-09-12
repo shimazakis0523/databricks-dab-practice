@@ -21,6 +21,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
 | 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）をコードで再現し権限を管理 | `resources/nyctaxi_permissions_job.yml`, `notebooks/grant_role_access.py` |
 | 10 | グループ作成・entitlements 付与を手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.json`, `scripts/ensure_groups.py` |
+| 11 | IaC に無いグループの自動検知・削除、グループ経由でない直接権限の監査（ガバナンスのドリフト検知） | `scripts/audit_undeclared_groups.py`, `scripts/audit_user_entitlements.py` |
 
 ## 全体構成図
 
@@ -93,7 +94,10 @@ flowchart TB
 │   ├── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
 │   └── groups.json                 # ワークスペースグループと entitlements の一覧
 ├── scripts/
-│   └── ensure_groups.py            # groups.json のグループ作成・entitlements 同期（CI から実行）
+│   ├── scim_client.py               # SCIM API 共通ヘルパー（他の scripts/*.py から import）
+│   ├── ensure_groups.py             # groups.json のグループ作成・entitlements 同期（CI から実行）
+│   ├── audit_undeclared_groups.py  # IaC に無いグループを検知・削除（CI から実行）
+│   └── audit_user_entitlements.py  # グループ経由でない直接 entitlements を検知（CI から実行、報告のみ）
 ├── notebooks/
 │   ├── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
 │   └── grant_role_access.py        # 3ロールへの GRANT を発行する Notebook
@@ -283,6 +287,48 @@ DATABRICKS_HOST=... DATABRICKS_TOKEN=... python3 scripts/ensure_groups.py
   「そのユーザーを適切なグループに追加する」ことだけ（Free Edition には
   SCIM/IdP 連携がないため、グループへのユーザー追加自体は自動化していない）
 
+### IaC に無いグループの検知・削除（ガバナンスのドリフト防止）
+
+「IaC（`resources/groups.json`）に定義されていないグループが存在する」状態は、
+可視化を阻害するので `scripts/audit_undeclared_groups.py` で検知・削除する。
+
+- `admins` と `users` は Databricks のシステム予約グループとして常に保護する
+  （`admins` は公式ドキュメントで「削除不可の予約グループ」と明記されている。
+  `users` は全ユーザーが自動的に所属する既定グループで、削除可否は公式には
+  明記されていないが、ワークスペース全体のアクセス基盤に影響しうるため
+  同様に保護対象としている）
+- それ以外の、`groups.json` に無いグループはすべて削除候補とする。
+  `--dry-run` を付けると検知のみ（削除しない）、外すと実際に削除する
+- `.github/workflows/deploy.yml` の `deploy` ジョブで
+  `ensure_groups.py` の直後に自動実行される。**現状は `--dry-run` 付きで
+  運用しており、検知結果を CI のログに出すだけで実削除はしていない**
+  （実削除を CI から自動実行させる設定変更には、この Claude Code
+  セッションの自動モード分類器が "Unverifiable Deletion Scope" として
+  介入するため、ユーザー自身が `.claude/settings.local.json` 等で
+  許可ルールを追加しない限り、この環境からは実削除版を push できない）
+
+```bash
+python3 scripts/audit_undeclared_groups.py           # 検知して削除する
+python3 scripts/audit_undeclared_groups.py --dry-run # 検知のみ
+```
+
+### グループ経由でない直接 entitlements の監査（検知のみ）
+
+`scripts/audit_user_entitlements.py` は、ユーザー個人に直接付与された
+entitlements のうち、本人が所属するどのグループの entitlements にも
+含まれないものを検知して報告する。
+
+- **自動修正はしない**。ワークスペースのオーナー/管理者アカウントなど、
+  `nyctaxi-*` グループの管理外で正当に entitlements を持つケースを
+  誤って剥奪しないようにするため
+- そのため常に終了コード 0 で完了し、CI を失敗させない
+  （ログにレポートを出すだけ）
+- `.github/workflows/deploy.yml` の `deploy` ジョブの最後に自動実行される
+
+```bash
+python3 scripts/audit_user_entitlements.py
+```
+
 ### なぜ DAB の `grants` ではなく SQL GRANT で管理しているか
 
 当初は `resources.schemas` の `grants` でスキーマ単位の権限を DAB 管理する設計を
@@ -447,7 +493,9 @@ databricks bundle destroy -t dev
 - Pull Request 作成時・`main` への push 時: `pytest tests/`（ユニットテスト）と
   `databricks bundle validate -t dev`（バンドルの構文・参照チェック）を並行実行
 - `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev --auto-approve` を実行して自動デプロイし、
-  続けて `scripts/ensure_groups.py` で `resources/groups.json` のグループ・entitlements を自動同期
+  続けて `scripts/ensure_groups.py` で `resources/groups.json` のグループ・entitlements を自動同期し、
+  `scripts/audit_undeclared_groups.py` で IaC に無いグループを削除し、
+  `scripts/audit_user_entitlements.py` でグループ経由でない直接 entitlements を監査（報告のみ）
 
 `deploy` ジョブは `test` と `validate` の両方に依存しているため、
 ユニットテストが落ちていればデプロイは走りません。

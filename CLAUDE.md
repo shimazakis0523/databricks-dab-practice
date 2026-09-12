@@ -45,3 +45,18 @@ README を更新し忘れると CI が落ちる。
   別系統のガバナンスになりがちなので使わない。entitlements もグループに
   設定し（`resources/groups.json` の `entitlements`）、ユーザーは
   グループ経由で継承させることでガバナンスを一本化する。
+- IaC（`resources/groups.json`）に定義されていないグループが存在してはならない、
+  という前提を `scripts/audit_undeclared_groups.py` で機械的に検知・削除できる
+  ようにしてある。ただし `admins` / `users` は Databricks のシステム予約
+  グループなので、削除候補から常に除外する（ハードコードした保護リストに
+  手を加えない）。CI（`.github/workflows/deploy.yml`）では現状 `--dry-run`
+  付きで実行しており、実削除はしていない。実削除を CI から自動化する変更
+  （`--dry-run` を外す）は、この Claude Code セッションの自動モード分類器が
+  "Unverifiable Deletion Scope" として拒否し、`.claude/settings.local.json`
+  への許可ルール追加もセッション自身では「Self-Modification」として拒否
+  される。ユーザー本人がその設定ファイルを用意しない限り、この環境からは
+  実削除版を commit/push できない。
+- ユーザーへの直接付与（グループ経由でない）entitlements は検知はするが
+  （`scripts/audit_user_entitlements.py`）自動修正はしない。ワークスペースの
+  オーナー/管理者アカウントなど、正当な理由で直接権限を持つ場合があるため。
+  このスクリプトは常に exit code 0 で終了する仕様を変えない。
