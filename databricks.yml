@@ -15,6 +15,38 @@ variables:
     description: BI ダッシュボードが参照する SQL Warehouse の ID
     default: "6a598981a672a44a"
 
+  # gold_qa_agent（resources/gold_qa_agent_serving.yml）関連。
+  # いずれもワークスペースごとに異なる値、またはモデル登録のたびに変わる値
+  # のため、コードに直書きせず変数として切り出している。
+  gold_qa_agent_model_version:
+    description: >-
+      Model Serving に配信する gold_qa_agent の Unity Catalog モデルバージョン。
+      notebooks/register_gold_qa_agent.py を実行するたびに新しいバージョンが
+      登録されるため、実行後に表示される Version の値へ更新して再デプロイする。
+    default: "1"
+  agent_databricks_host:
+    description: >-
+      gold_qa_agent の Model Serving エンドポイントが、Databricks の
+      Foundation Model API（Model Serving の OpenAI 互換エンドポイント）を
+      呼び出す際に使うワークスペース URL。databricks.yml 自体には
+      workspace.host を直書きしていないため、ここで別途指定する
+      （例: --var="agent_databricks_host=<あなたのワークスペース URL>"）。
+    default: ""
+  agent_secret_scope:
+    description: >-
+      gold_qa_agent の Model Serving エンドポイントに DATABRICKS_TOKEN を
+      安全に渡すための Databricks シークレットスコープ名。事前に
+      `databricks secrets create-scope <スコープ名>` と
+      `databricks secrets put-secret <スコープ名> databricks_token` で
+      トークンを登録しておくこと（README「GenAI エージェント」参照）。
+    default: "gold_qa_agent"
+  gold_qa_foundation_model_endpoint:
+    description: >-
+      gold_qa_agent が呼び出す基盤モデル（Foundation Model API）の
+      エンドポイント名。ワークスペースのプラン/リージョンによって提供
+      モデルが異なりうるため変数化している。
+    default: "databricks-meta-llama-3-3-70b-instruct"
+
 targets:
   dev:
     # mode: development を指定しない = 本番相当のデプロイ。

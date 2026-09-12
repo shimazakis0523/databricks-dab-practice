@@ -24,6 +24,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 11 | IaC に無いグループの自動検知・削除、グループ経由でない直接権限の監査（ガバナンスのドリフト検知） | `scripts/audit_undeclared_groups.py`, `scripts/audit_user_entitlements.py` |
 | 12 | gold テーブルの BI ダッシュボードを DAB リソースとして宣言的に管理 | `resources/nyctaxi_dashboard.yml`, `dashboards/nyctaxi_gold_dashboard.lvdash.json` |
 | 13 | 環境（ワークスペース）依存の値をコードに直書きせず変数/環境変数へ外だしし、別環境への移植性を担保 | `databricks.yml`（`variables.warehouse_id`）, `tests/test_no_hardcoded_workspace_values.py` |
+| 14 | gold テーブルを参照する GenAI エージェントを MLflow ResponsesAgent として実装し、Model Serving で配信 | `agents/gold_qa_responses_agent.py`, `resources/gold_qa_agent_serving.yml` |
 
 ## 全体構成図
 
@@ -58,6 +59,10 @@ flowchart TB
         NyctaxiJob["Job: nyctaxi_job\nFile arrival トリガー"]
 
         Dashboard["Dashboard: nyctaxi_gold_dashboard\nカウンター/折れ線/棒グラフ/テーブル"]
+
+        RegJob["Job: gold_qa_agent_registration_job\n(手動実行)\ngold を要約し MLflow に登録"]
+        AgentServing["Model Serving: gold_qa_agent\n(ResponsesAgent)"]
+        FMAPI["Foundation Model API\n(pay-per-token)"]
     end
 
     Push --> Test
@@ -69,6 +74,9 @@ flowchart TB
     NyctaxiJob -->|"pipeline_task"| Pipeline
     Volume -->|"Auto Loader\ncloudFiles"| Bronze
     Gold -->|"SQL Warehouse で参照"| Dashboard
+    Gold -->|"集計データを登録時に取得"| RegJob
+    RegJob -->|"モデル登録 (Unity Catalog)"| AgentServing
+    AgentServing -->|"OpenAI 互換 API"| FMAPI
 ```
 
 ### データの流れ（実行時）
@@ -81,6 +89,11 @@ flowchart TB
 6. `trips_daily_gold` が日次 × 乗車 ZIP で集計
 7. `nyctaxi_gold_dashboard` が SQL Warehouse 経由で `trips_daily_gold` を参照し、
    BI ダッシュボードとして可視化する
+8. `gold_qa_agent_registration_job` を実行 → `trips_daily_gold` を ZIP 別に集計し、
+   その要約を `gold_qa_agent`（MLflow ResponsesAgent）にスナップショットとして
+   バンドルして Unity Catalog に登録する
+9. `gold_qa_agent` の Model Serving エンドポイントに質問を送ると、登録時の
+   gold データの要約と質問を Foundation Model API に渡し、日本語で回答する
 
 ### デプロイの流れ（コード変更時）
 
@@ -100,9 +113,14 @@ flowchart TB
 │   ├── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
 │   ├── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
 │   ├── groups.json                 # ワークスペースグループと entitlements の一覧
-│   └── nyctaxi_dashboard.yml       # gold テーブルの BI ダッシュボード定義
+│   ├── nyctaxi_dashboard.yml       # gold テーブルの BI ダッシュボード定義
+│   ├── gold_qa_agent_job.yml       # Job 定義（gold_qa_agent の登録、手動実行用）
+│   └── gold_qa_agent_serving.yml   # Model Serving エンドポイント定義（gold_qa_agent）
 ├── dashboards/
 │   └── nyctaxi_gold_dashboard.lvdash.json  # Lakeview ダッシュボード本体（データセット/ページ/ウィジェット）
+├── agents/
+│   ├── gold_qa_agent.py            # プロンプト構築ロジック本体（純粋関数、pytest でテスト可能）
+│   └── gold_qa_responses_agent.py  # MLflow ResponsesAgent 実装（Databricks 実行環境依存）
 ├── scripts/
 │   ├── scim_client.py               # SCIM API 共通ヘルパー（他の scripts/*.py から import）
 │   ├── ensure_groups.py             # groups.json のグループ作成・entitlements 同期（CI から実行）
@@ -110,7 +128,8 @@ flowchart TB
 │   └── audit_user_entitlements.py  # グループ経由でない直接 entitlements を検知（CI から実行、報告のみ）
 ├── notebooks/
 │   ├── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
-│   └── grant_role_access.py        # 3ロールへの GRANT を発行する Notebook
+│   ├── grant_role_access.py        # 3ロールへの GRANT を発行する Notebook
+│   └── register_gold_qa_agent.py   # gold_qa_agent を MLflow に登録する Notebook
 ├── pipelines/
 │   ├── nyctaxi_pipeline.py         # bronze(Auto Loader) / silver / gold を宣言する Python（dlt 依存）
 │   └── transforms.py               # 変換ロジック本体（純粋関数、pytest でテスト可能）
@@ -121,7 +140,8 @@ flowchart TB
 │   ├── test_readme_sync.py            # README.md のファイル記載漏れチェック（再発防止）
 │   ├── test_groups_json_sync.py       # groups.json の entitlements 値の転記漏れチェック（再発防止）
 │   ├── test_no_hardcoded_workspace_values.py  # databricks.yml へのワークスペース URL 直書きチェック（再発防止）
-│   └── test_dashboard_conventions.py  # lvdash.json の Lakeview 規約違反チェック（再発防止）
+│   ├── test_dashboard_conventions.py  # lvdash.json の Lakeview 規約違反チェック（再発防止）
+│   └── test_gold_qa_agent.py          # gold_qa_agent.py のプロンプト構築ロジックのユニットテスト
 ├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 └── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
@@ -131,6 +151,8 @@ flowchart TB
 - Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
 - Job: `nyctaxi_permissions_job` — データエンジニア/アナリスト/閲覧者の3ロールへ権限を付与する（手動実行用）
 - Dashboard: `nyctaxi_gold_dashboard` — `trips_daily_gold` を可視化する Lakeview（AI/BI）ダッシュボード
+- Job: `gold_qa_agent_registration_job` — `gold_qa_agent`（GenAI エージェント）を MLflow に登録する（手動実行用）
+- Model Serving エンドポイント: `gold_qa_agent` — 登録した `gold_qa_agent` を配信する
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -338,6 +360,106 @@ resources:
 エラーメッセージだけでは原因がわからないことが多いため、GitHub 上の
 実際にエクスポートされた `.lvdash.json`（例: `databricks/tmm` リポジトリの
 サンプル）と比較してウィジェット定義を修正し、同テストに規約を追記すること。
+
+## GenAI エージェント（gold_qa_agent）
+
+`trips_daily_gold` の集計データについて日本語で質問できる、簡単な GenAI
+エージェントを MLflow の [ResponsesAgent](https://mlflow.org/docs/latest/genai/flavors/responses-agent-intro/)
+として実装し、Databricks Model Serving で配信します。
+
+- `agents/gold_qa_agent.py` — プロンプト構築ロジック本体（純粋関数）。
+  gold の集計行を LLM 向けのコンテキスト文字列に変換し、質問と合わせて
+  チャットメッセージを組み立てる。Databricks 実行環境に依存しないため
+  `tests/test_gold_qa_agent.py` でローカルにユニットテストできる
+  （`pipelines/transforms.py` と同じ設計パターン）。
+- `agents/gold_qa_responses_agent.py` — `mlflow.pyfunc.ResponsesAgent` の
+  実装。`trips_daily_gold` の集計データは**登録時にスナップショットとして
+  モデルにバンドル**し（`load_context` で読み込む）、推論時は毎回クエリを
+  発行しない。これにより Model Serving コンテナ内にデータベース接続情報を
+  持たせる必要がなくなり、構成をシンプルに保っている（そのぶん、gold の
+  データが更新されても登録済みのエージェントには反映されない。最新化したい
+  場合は `gold_qa_agent_registration_job` を再実行して登録し直すこと）。
+  推論時は Databricks の Foundation Model API（Model Serving の OpenAI 互換
+  エンドポイント）を呼び出して回答を生成する。
+- `notebooks/register_gold_qa_agent.py` — `trips_daily_gold` を ZIP 別に
+  集計してコンテキスト化し、`mlflow.pyfunc.log_model` で
+  `workspace.nyctaxi.gold_qa_agent` として Unity Catalog に登録する
+  Notebook（手動実行用）。
+- `resources/gold_qa_agent_job.yml` — 上記 Notebook を実行する Job
+  （`gold_qa_agent_registration_job`）。
+- `resources/gold_qa_agent_serving.yml` — 登録したモデルを配信する
+  Model Serving エンドポイント（`gold_qa_agent`）。
+
+### セットアップ手順
+
+1. **DATABRICKS_TOKEN 用のシークレットを登録する** — Model Serving
+   エンドポイントが Foundation Model API を呼び出すためのトークンを、
+   Databricks シークレットスコープに保存する（コードや `databricks.yml` に
+   平文で書かない）:
+
+   ```bash
+   databricks secrets create-scope gold_qa_agent
+   databricks secrets put-secret gold_qa_agent databricks_token
+   ```
+
+   別のスコープ名を使う場合は `databricks.yml` の
+   `variables.agent_secret_scope` を上書きする。
+
+2. **`agent_databricks_host` 変数を設定する** — エンドポイントが
+   Foundation Model API を呼び出す際に使うワークスペース URL
+   （`databricks.yml` 自体には `workspace.host` を直書きしていないため、
+   別途この変数で渡す）:
+
+   ```bash
+   databricks bundle deploy -t dev --var="agent_databricks_host=<あなたのワークスペース URL>"
+   ```
+
+3. **`trips_daily_gold` を作成する** — `nyctaxi_pipeline` を一度実行し、
+   gold テーブルが存在する状態にしておく。
+
+4. **`gold_qa_agent_registration_job` を実行する** — `trips_daily_gold`
+   を要約してモデルを登録する:
+
+   ```bash
+   databricks bundle run gold_qa_agent_registration_job -t dev
+   ```
+
+   実行後に表示される **Version** の値を、`databricks.yml` の
+   `variables.gold_qa_agent_model_version` に設定し、再デプロイする
+   （`--var="gold_qa_agent_model_version=<バージョン>"` でも上書き可能）。
+
+5. **Model Serving エンドポイントを確認する** — ワークスペースの
+   **Serving** 画面で `gold_qa_agent` エンドポイントが Ready になったら、
+   Playground や API から質問できる。
+
+### 変数化している値
+
+`warehouse_id` と同じ理由（ワークスペースごとに異なる値、または
+モデル登録のたびに変わる値）で、以下を `databricks.yml` の `variables` に
+切り出している:
+
+| 変数 | 説明 |
+| --- | --- |
+| `gold_qa_agent_model_version` | 配信する Unity Catalog モデルのバージョン |
+| `agent_databricks_host` | エージェントが Foundation Model API を呼ぶ際のワークスペース URL |
+| `agent_secret_scope` | `DATABRICKS_TOKEN` を保管するシークレットスコープ名 |
+| `gold_qa_foundation_model_endpoint` | 呼び出す基盤モデルのエンドポイント名（既定値: `databricks-meta-llama-3-3-70b-instruct`） |
+
+### 検証済みでない点（要ワークスペース確認）
+
+BI ダッシュボードのときと同様、この機能は MLflow / Model Serving /
+Foundation Model API の実際の挙動をこのセッションからライブ検証できない
+ため、`databricks bundle validate` の構文チェックとローカルのユニット
+テストまでしか確認できていない。デプロイ後に以下を確認してほしい:
+
+- `gold_qa_agent_registration_job` の実行がエラーなく完了し、モデルが
+  Unity Catalog に登録されること
+- `gold_qa_agent` の Model Serving エンドポイントが Ready になること
+- Playground などから実際に質問して、日本語で妥当な回答が返ること
+
+エラーが出た場合は、Lakeview ダッシュボードのときと同じ方針
+（推測ではなく実際の Databricks/MLflow のログ・エラーメッセージ、および
+GitHub 上の実例で確認したうえで修正する）で対応する。
 
 ## 組織/権限管理（ロールベースアクセス）
 

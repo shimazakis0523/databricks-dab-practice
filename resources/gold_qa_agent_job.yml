@@ -1,0 +1,11 @@
+resources:
+  jobs:
+    gold_qa_agent_registration_job:
+      name: gold_qa_agent_registration_job
+      # 手動実行用（gold テーブルの内容を更新したいタイミング、または
+      # プロンプト/コードを変更したタイミングで実行する）。スケジュールは
+      # 設定しない。
+      tasks:
+        - task_key: register_gold_qa_agent
+          notebook_task:
+            notebook_path: ../notebooks/register_gold_qa_agent.py
