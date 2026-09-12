@@ -75,12 +75,16 @@ def test_widget_queries_are_named_main_query():
 
 
 # Lakeview の table ウィジェットが列型として受け付けることを、実際に
-# ワークスペースがエクスポートした .lvdash.json（databricks/tmm リポジトリの
-# サンプル）で確認できた値だけを保守的にリストする。日付列は "date" ではなく
-# "datetime"（+ dateTimeFormat）が正しい値であり、この値の取り違えで
-# 実際に "Invalid widget definition is imported" になったことがある。
-# 他の型（boolean 等）を使う場合は、実際のワークスペースで確認してから
-# ここに追加すること。
+# ワークスペースがエクスポートした .lvdash.json で確認できた値だけを
+# 保守的にリストする。
+# 検証元（verbatim で確認済み）:
+#   https://github.com/databricks/tmm/blob/main/System-Tables-Demo/Jobs-PrPr/Jobs%20System%20Tables%20Dashboard.lvdash.json
+# 日付列は "date" ではなく "datetime"（+ dateTimeFormat）が正しい値であり、
+# この値を取り違えて（一度は "date" に「修正」してしまい）実際に
+# "Invalid widget definition is imported" になったことがある。
+# 他の型（boolean 等）を使う場合は、上記のような実エクスポート例で
+# verbatim に確認してから、参照元コメントとあわせてここに追加すること
+# （推測・要約だけを根拠に追加しない）。
 VALID_COLUMN_TYPES = {
     "string",
     "datetime",
@@ -89,8 +93,8 @@ VALID_COLUMN_TYPES = {
 }
 
 # table ウィジェットの列オブジェクトが実エクスポート例で常に持っている
-# フィールド。これらを省略すると、type の値が正しくても
-# "Invalid widget definition is imported" になったことがある。
+# フィールド（検証元は上記と同じ）。これらを省略すると、type の値が
+# 正しくても "Invalid widget definition is imported" になったことがある。
 REQUIRED_COLUMN_FIELDS = {
     "fieldName",
     "booleanValues",
