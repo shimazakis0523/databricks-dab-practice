@@ -1,16 +1,14 @@
 resources:
-  schemas:
-    nyctaxi_schema:
-      name: nyctaxi
-      catalog_name: workspace
-      comment: NYC タクシーパイプラインの出力先 & ランディングゾーン用スキーマ
-
   volumes:
     nyctaxi_landing:
       name: landing
       catalog_name: workspace
-      # 同じ「nyctaxi」スキーマを共有する（パイプライン側は文字列 "nyctaxi" で直接参照）
-      schema_name: ${resources.schemas.nyctaxi_schema.name}
+      # nyctaxi_pipeline.yml と同じく文字列で直接参照する。
+      # bundle 管理の schemas リソースにすると mode: development によって
+      # スキーマ名が "dev_<user>_nyctaxi" にリネームされ、パイプライン側の
+      # 文字列参照 "nyctaxi" とずれてしまうため、あえてバンドル管理にしない。
+      # スキーマ自体は nyctaxi_pipeline の初回実行時に自動作成される。
+      schema_name: nyctaxi
       volume_type: MANAGED
       comment: >-
         外部システムが CSV を配置するランディングゾーン。

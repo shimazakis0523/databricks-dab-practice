@@ -10,7 +10,7 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 ├── databricks.yml                  # バンドル定義（バンドル名 / ターゲット）
 ├── resources/
 │   ├── hello_world_job.yml         # Job 定義（Notebook を実行）
-│   ├── nyctaxi_landing.yml         # スキーマ + ランディング用 Volume 定義
+│   ├── nyctaxi_landing.yml         # ランディング用 Volume 定義
 │   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 │   └── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
@@ -47,7 +47,11 @@ CSV として書き出したものです。
 
 - 出力先は `workspace.nyctaxi` スキーマ（`resources/nyctaxi_pipeline.yml` の `catalog` / `schema`）
 - ランディングゾーンは `resources/nyctaxi_landing.yml` で定義する Volume
-  `/Volumes/workspace/nyctaxi/landing`（スキーマ自体も DAB のリソースとして管理）
+  `/Volumes/workspace/nyctaxi/landing`。`catalog_name` / `schema_name` は
+  パイプラインと同じく文字列で直接指定しています
+  （`mode: development` はバンドル管理の `schemas` リソースの物理名を
+  `dev_<user>_nyctaxi` のようにリネームしてしまうため、あえて schemas
+  リソースにはせず、パイプラインが作成する `nyctaxi` スキーマをそのまま参照しています）
 - 品質ルールは `@dlt.expect_all_or_drop` で定義。違反行は取り込まれず、パイプライン画面でドロップ件数を確認できます
 - CSV は Auto Loader の既定動作どおり、いったんすべて文字列として Bronze に入り、
   Silver に渡す前に `cast_raw_trip_columns`（`pipelines/transforms.py`）で型変換します
