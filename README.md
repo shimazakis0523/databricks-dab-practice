@@ -239,13 +239,21 @@ pytest tests/ -v
 グループ自体もワークスペース UI で手動作成するのではなく、
 `resources/groups.json` + `scripts/ensure_groups.py` で自動作成しています。
 
-想定しているロールと、対応するグループ:
+想定しているロールと、対応するグループ。**データ権限**は
+`notebooks/grant_role_access.py` の SQL GRANT、**entitlements**は
+`resources/groups.json` の内容そのもの（値が変わったらこの表も直すこと）:
 
-| ロール | グループ名 | データ権限 |
-| --- | --- | --- |
-| データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） |
-| アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） |
-| 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） |
+| ロール | グループ名 | データ権限 | entitlements（`resources/groups.json`） |
+| --- | --- | --- | --- |
+| データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） | `workspace-consume`, `workspace-access`, `databricks-sql-access`, `allow-cluster-create` |
+| アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） | `workspace-consume`, `workspace-access`, `databricks-sql-access` |
+| 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） | `workspace-consume`, `workspace-access`, `databricks-sql-access` |
+
+- `workspace-consume`（Consumer access）は Databricks がユーザー作成時に
+  要求する最低限の entitlement。回避できないため全グループに含めている
+- `allow-cluster-create` はデータエンジニアのみ。Free Edition はサーバーレス
+  専用なので実質的な効果はないが、専有クラスタが使える環境に移行した場合に
+  備えてロールの定義として残している
 
 ### グループの自動作成と entitlements の統一管理（手動クリック不要）
 
