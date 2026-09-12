@@ -1,7 +1,7 @@
 # databricks-dab-practice
 
 Databricks Asset Bundles (DAB) の学習用プロジェクトです。
-Hello World を出力する Notebook と Job、および NYC タクシーデータのメダリオンパイプラインを DAB で管理します。
+NYC タクシーデータのメダリオンパイプラインを DAB で管理します。
 
 ## 構成
 
@@ -9,13 +9,11 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 .
 ├── databricks.yml                  # バンドル定義（バンドル名 / ターゲット）
 ├── resources/
-│   ├── hello_world_job.yml         # Job 定義（Notebook を実行）
 │   ├── nyctaxi_landing.yml         # ランディング用 Volume 定義
 │   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 │   └── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
 ├── notebooks/
-│   ├── hello_world.py              # Hello World を出力する Notebook
 │   └── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
 ├── pipelines/
 │   ├── nyctaxi_pipeline.py         # bronze(Auto Loader) / silver / gold を宣言する Python（dlt 依存）
@@ -27,7 +25,6 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 └── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 ```
 
-- Job: `hello_world_job` — タスク `hello_world_task` が `notebooks/hello_world.py` を実行
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
 - Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（毎日 6:00 JST）
 - Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
@@ -146,19 +143,19 @@ pytest tests/ -v
 ### 2. Bundle エディタを開く
 
 Git フォルダ内の `databricks.yml` をクリックすると、バンドルとして認識され
-Bundle エディタが開きます。左側にバンドルのリソース（`hello_world_job`）が表示されます。
+Bundle エディタが開きます。左側にバンドルのリソース（`nyctaxi_pipeline` など）が表示されます。
 
 ### 3. ターゲットを選んでデプロイする
 
 1. エディタ右上のターゲット選択で **dev** を選びます。
 2. **Deploy** をクリックします。
-3. デプロイログが表示され、完了すると `[dev <ユーザー名>] hello_world_job` が作成されます。
+3. デプロイログが表示され、完了すると `[dev <ユーザー名>] nyctaxi_pipeline` などが作成されます。
 
-### 4. Job を実行する
+### 4. Job / Pipeline を実行する
 
-1. リソース一覧から `hello_world_job` を選び、**Run** をクリックします。
-2. 実行結果のセル出力に `Hello World` が表示されます。
-3. **ジョブとパイプライン** 画面からも実行履歴を確認できます。
+1. リソース一覧から `nyctaxi_seed_job` を選び、**Run** をクリックします（CSV をランディングゾーンへ投入）。
+2. 続けて `nyctaxi_pipeline`（または `nyctaxi_job`）を **Run** します。
+3. **ジョブとパイプライン** 画面から実行履歴・結果を確認できます。
 
 ### 5. 変更を GitHub に戻す
 
@@ -226,24 +223,24 @@ databricks bundle deploy -t dev
 
 成功すると、ワークスペースの
 `/Workspace/Users/<your-email>/.bundle/databricks-dab-practice/dev/` 配下にファイルが配置され、
-`[dev <your-name>] hello_world_job` という名前の Job が作成されます。
+`[dev <your-name>] nyctaxi_pipeline` などの Job / Pipeline が作成されます。
 
-### 7. Job を実行する
+### 7. Job / Pipeline を実行する
 
 ```bash
-databricks bundle run hello_world_job -t dev
+databricks bundle run nyctaxi_seed_job -t dev   # CSV をランディングゾーンへ投入
+databricks bundle run nyctaxi_pipeline -t dev   # パイプラインを実行
 ```
 
-実行ログに `Hello World` が出力されます。
 Databricks 画面の **ジョブとパイプライン** からも実行・結果確認ができます。
 
-### 8. 後片付け（任意）
+### 8. 後片付け(任意)
 
 ```bash
 databricks bundle destroy -t dev
 ```
 
-デプロイした Job とファイルが削除されます。
+デプロイした Job・Pipeline・Volume とファイルが削除されます。
 
 ## C. GitHub Actions から自動デプロイする（CI/CD）
 
