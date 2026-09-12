@@ -11,4 +11,4 @@ resources:
         # 同じディレクトリに置くことで nyctaxi_pipeline.py から
         # `from transforms import ...` として通常の Python import で参照できる。
         - glob:
-            include: ../pipelines/*.py
+            include: ../pipelines/**
