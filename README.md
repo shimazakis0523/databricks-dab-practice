@@ -162,6 +162,12 @@ CSV として書き出したものです。
 
 1. **CSV を投入する** — `nyctaxi_seed_job` を **Run**。`samples.nyctaxi.trips` から
    2,000 件を抜き出し、4 ファイルに分けてランディングゾーンへ CSV として書き出します。
+   `notebooks/seed_nyctaxi_csv.py` は `.limit(2000)` で抜き出しており、
+   ランダムサンプリングではなくテーブルの先頭からの一部分になる。そのため
+   gold の平均値（平均運賃・平均距離・平均乗車時間など）は
+   `samples.nyctaxi.trips` 全体の代表値ではなく、この POC 用に抜き出した
+   一部分の集計値である点に注意（本番相当のデータで統計的な代表性が必要な
+   場合は、`.orderBy(F.rand())` などでランダムサンプリングに変更すること）。
 2. **パイプラインを実行する** — `nyctaxi_pipeline`（または `nyctaxi_job`）を **Run**。
    Auto Loader がランディングゾーンの CSV を取り込み、bronze → silver → gold を更新します。
 
@@ -261,8 +267,12 @@ Notebook/Job と同様に DAB リソースとして宣言的に管理してい�
 | --- | --- |
 | カウンター | 総トリップ数（`SUM(trip_count)`） |
 | 折れ線グラフ | 日次トリップ数の推移 |
-| 棒グラフ | 乗車 ZIP ごとの平均運賃 |
-| テーブル | `trips_daily_gold` の明細（乗車日・乗車ZIP・件数・平均運賃・平均距離・平均乗車時間） |
+| 棒グラフ | 乗車 ZIP ごとの平均運賃（$） |
+| テーブル | `trips_daily_gold` の明細（乗車日・乗車ZIP・件数・平均運賃($)・平均距離(マイル)・平均乗車時間(分)） |
+
+`avg_fare` は USD（`$`）、`avg_distance` はマイルであり、
+`samples.nyctaxi.trips`（NYC TLC 形式）の単位をそのまま引き継いでいる。
+ダッシュボードの列タイトルにも単位を明記している。
 
 ```yaml
 resources:
