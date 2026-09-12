@@ -26,7 +26,7 @@ NYC タクシーデータのメダリオンパイプラインを DAB で管理�
 ```
 
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
-- Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（毎日 6:00 JST）
+- Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（ランディングゾーンへの CSV 到着を検知する File arrival トリガー）
 - Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
@@ -72,10 +72,32 @@ databricks bundle run nyctaxi_job -t dev        # Job 経由で実行
 Auto Loader が「前回取り込み済みのファイルはスキップし、新しいファイルだけを取り込む」
 様子を確認できます（bronze テーブルの行数が差分だけ増える）。
 
+### 自動実行（File arrival トリガー）
+
 `nyctaxi_job` は `pipeline_task` でパイプライン ID を参照しており、
 ID はバンドルのデプロイ時に `${resources.pipelines.nyctaxi_pipeline.id}` で自動解決されます。
-スケジュール（毎日 6:00 JST）を設定していますが、`mode: development` のターゲットでは
-自動的に一時停止された状態でデプロイされます。
+
+手動で Run する代わりに、ランディングゾーン（`/Volumes/workspace/nyctaxi/landing/`）に
+新しい CSV が届いたことを検知して自動的に起動する **File arrival トリガー** を設定しています。
+`nyctaxi_seed_job` を実行して CSV を投入すると、`nyctaxi_job` → `nyctaxi_pipeline` が
+自動的に起動し、手動で Run しなくても取り込みが行われます。
+
+```yaml
+trigger:
+  file_arrival:
+    url: /Volumes/workspace/nyctaxi/landing/
+    min_time_between_triggers_seconds: 60
+    wait_after_last_change_seconds: 60
+```
+
+- `min_time_between_triggers_seconds`: 短時間に何度もファイルが来ても、この間隔以上空けてから起動する
+- `wait_after_last_change_seconds`: 最後のファイル変更からこの秒数だけ待ってから起動する（書き込み完了を待つため）
+
+> **注意**: `mode: development` のターゲットではトリガーが自動的に一時停止（PAUSED）状態で
+> デプロイされます。有効にするには、ワークスペースで `nyctaxi_job` を開き、手動で
+> トリガーを Resume してください。有効化すると、ファイルが届くたびにサーバーレスが
+> 起動して実行されるため、`nyctaxi_seed_job` を連続実行するとサーバーレス枠を
+> 早く消費する点に注意してください。
 
 実行後、カタログエクスプローラの `workspace > nyctaxi` に3つのテーブルが作成されます。
 SQL エディタから確認できます。

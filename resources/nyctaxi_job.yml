@@ -3,10 +3,16 @@ resources:
     nyctaxi_job:
       name: nyctaxi_job
 
-      # 毎日 6:00 (JST) に実行。mode: development のターゲットでは自動的に一時停止される
-      schedule:
-        quartz_cron_expression: "0 0 6 * * ?"
-        timezone_id: Asia/Tokyo
+      # ランディングゾーンに新しい CSV が届いたら自動起動する。
+      # mode: development のターゲットではトリガーが自動的に一時停止(PAUSED)されるため、
+      # 有効にするにはワークスペースで Job を開いて手動で Resume する必要がある。
+      trigger:
+        file_arrival:
+          url: /Volumes/workspace/nyctaxi/landing/
+          # 短時間に何度もファイルが来ても、この間隔以上は空けてから起動する
+          min_time_between_triggers_seconds: 60
+          # 最後のファイル変更からこの秒数だけ待ってから起動する(書き込み完了を待つため)
+          wait_after_last_change_seconds: 60
 
       tasks:
         - task_key: run_nyctaxi_pipeline
