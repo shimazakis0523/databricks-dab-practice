@@ -10,7 +10,8 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 ├── databricks.yml                  # バンドル定義（バンドル名 / ターゲット）
 ├── resources/
 │   ├── hello_world_job.yml         # Job 定義（Notebook を実行）
-│   └── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
+│   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
+│   └── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 ├── notebooks/
 │   └── hello_world.py              # Hello World を出力する Notebook
 └── pipelines/
@@ -19,6 +20,7 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 
 - Job: `hello_world_job` — タスク `hello_world_task` が `notebooks/hello_world.py` を実行
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
+- Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（毎日 6:00 JST）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -38,11 +40,17 @@ Databricks に最初から用意されているサンプル `samples.nyctaxi.tri
 ### 実行方法
 
 デプロイ後、Bundle resources から `nyctaxi_pipeline` を選んで **Run** すると全レイヤが更新されます。
-CLI の場合は以下です。
+パイプラインを起動する Job `nyctaxi_job` も用意してあるので、そちらを **Run** しても同じ結果になります。
 
 ```bash
-databricks bundle run nyctaxi_pipeline -t dev
+databricks bundle run nyctaxi_pipeline -t dev   # パイプラインを直接実行
+databricks bundle run nyctaxi_job -t dev        # Job 経由で実行
 ```
+
+`nyctaxi_job` は `pipeline_task` でパイプライン ID を参照しており、
+ID はバンドルのデプロイ時に `${resources.pipelines.nyctaxi_pipeline.id}` で自動解決されます。
+スケジュール（毎日 6:00 JST）を設定していますが、`mode: development` のターゲットでは
+自動的に一時停止された状態でデプロイされます。
 
 実行後、カタログエクスプローラの `workspace > nyctaxi` に3つのテーブルが作成されます。
 SQL エディタから確認できます。

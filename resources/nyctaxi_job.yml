@@ -1,0 +1,15 @@
+resources:
+  jobs:
+    nyctaxi_job:
+      name: nyctaxi_job
+
+      # 毎日 6:00 (JST) に実行。mode: development のターゲットでは自動的に一時停止される
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: Asia/Tokyo
+
+      tasks:
+        - task_key: run_nyctaxi_pipeline
+          pipeline_task:
+            # 同じバンドル内のパイプラインを参照する
+            pipeline_id: ${resources.pipelines.nyctaxi_pipeline.id}
