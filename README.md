@@ -304,16 +304,20 @@ resources:
 
 `.lvdash.json` はコードから手書きしたものであり、`databricks bundle validate`
 は JSON の構文しかチェックしないため、実際にワークスペースへデプロイして
-初めてウィジェットの表示が正しいか確認できる。過去に、単一クエリウィジェットの
-`queries[].name` を任意の名前にしていたため実ワークスペースで
-`Missing query "main_query"` エラーになり、table ウィジェットの
-`encodings.columns` に `type` を指定していなかったため
-`Invalid widget definition is imported` エラーになったことがある
-（`queries[].name` は固定で `main_query` にする必要があり、`type` は
-必須フィールド）。これらの既知の規約違反は `tests/test_dashboard_conventions.py`
-で機械的にチェックしている。それ以外の描画エラーが出た場合は、
-`databricks bundle deploy` のエラーメッセージに従ってウィジェット定義を
-修正し、同テストに規約を追記すること。
+初めてウィジェットの表示が正しいか確認できる。過去に踏んだ規約違反:
+
+- 単一クエリウィジェットの `queries[].name` を任意の名前にしていたため
+  `Missing query "main_query"` エラーになった（固定で `main_query` にする必要がある）
+- table ウィジェットの `encodings.columns` の日付列に `"type": "datetime"`
+  を指定していたため `Invalid widget definition is imported` エラーになった
+  （`type` フィールド自体はあったが値が無効だった。正しくは `"date"` +
+  `dateTimeFormat`）
+
+`type` は「フィールドが存在するか」だけでなく「値が Lakeview の許容する
+ものか」まで確認しないと同じ失敗を繰り返す。これらの既知の規約違反は
+`tests/test_dashboard_conventions.py` で機械的にチェックしている。
+それ以外の描画エラーが出た場合は、`databricks bundle deploy` の
+エラーメッセージに従ってウィジェット定義を修正し、同テストに規約を追記すること。
 
 ## 組織/権限管理（ロールベースアクセス）
 

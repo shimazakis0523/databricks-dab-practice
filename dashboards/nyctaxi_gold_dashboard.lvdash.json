@@ -163,7 +163,8 @@
                 "columns": [
                   {
                     "fieldName": "pickup_date",
-                    "type": "datetime",
+                    "dateTimeFormat": "YYYY-MM-DD",
+                    "type": "date",
                     "displayAs": "datetime",
                     "visible": true,
                     "order": 0,
@@ -183,6 +184,7 @@
                   },
                   {
                     "fieldName": "trip_count",
+                    "numberFormat": "0",
                     "type": "integer",
                     "displayAs": "number",
                     "visible": true,
@@ -193,6 +195,7 @@
                   },
                   {
                     "fieldName": "avg_fare",
+                    "numberFormat": "0.00",
                     "type": "decimal",
                     "displayAs": "number",
                     "visible": true,
@@ -203,6 +206,7 @@
                   },
                   {
                     "fieldName": "avg_distance",
+                    "numberFormat": "0.00",
                     "type": "decimal",
                     "displayAs": "number",
                     "visible": true,
@@ -213,6 +217,7 @@
                   },
                   {
                     "fieldName": "avg_trip_minutes",
+                    "numberFormat": "0.00",
                     "type": "decimal",
                     "displayAs": "number",
                     "visible": true,
