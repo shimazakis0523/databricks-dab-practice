@@ -28,7 +28,10 @@ README を更新し忘れると CI が落ちる。
   import できないため）。
 - コミット・push 前にローカルで `pytest tests/ -v` を実行して確認する。
 - 組織のロール・権限は「現在の自分がたまたま admin だから省略してよい」で判断しない。
-  ロールごとの権限は常にコード（DAB の `grants` / 一時的な SQL GRANT）として実装する。
-  DAB の `grants` はスキーマ単位までしか宣言できず、テーブル単位の絞り込みが必要な場合は
-  `resources/nyctaxi_permissions.yml` と `notebooks/grant_viewer_access.py` のパターン
-  （スキーマ単位は DAB、テーブル単位は明示的な SQL GRANT）を踏襲する。
+  ロールごとの権限は常にコードとして実装する（`resources/nyctaxi_permissions_job.yml` +
+  `notebooks/grant_role_access.py` の SQL GRANT）。
+- Unity Catalog のスキーマを `resources.schemas` としてバンドル管理しようとすると、
+  そのスキーマが既にバンドル管理外で作成済みの場合 `SCHEMA_ALREADY_EXISTS` で
+  デプロイが失敗する。既存データを保持したまま権限だけ管理したい場合は、
+  `resources.schemas` の `grants` ではなく、明示的な SQL GRANT（べき等な
+  Notebook + 手動実行 Job）で運用する。

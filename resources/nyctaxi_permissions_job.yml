@@ -1,0 +1,10 @@
+resources:
+  jobs:
+    nyctaxi_permissions_job:
+      name: nyctaxi_permissions_job
+      # スケジュールなし。trips_daily_gold の初回作成後、または
+      # 各ロールのグループを作り直したときなどに手動 Run する。
+      tasks:
+        - task_key: grant_role_access
+          notebook_task:
+            notebook_path: ../notebooks/grant_role_access.py

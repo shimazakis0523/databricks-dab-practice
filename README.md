@@ -19,7 +19,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 6 | Databricks 実行環境に依存しない変換ロジックの単体テスト | `pipelines/transforms.py`, `tests/test_transforms.py` |
 | 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
 | 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
-| 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）を DAB の grants としてコード管理 | `resources/nyctaxi_permissions.yml`, `resources/nyctaxi_viewer_grant_job.yml` |
+| 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）をコードで再現し権限を管理 | `resources/nyctaxi_permissions_job.yml`, `notebooks/grant_role_access.py` |
 
 ## 全体構成図
 
@@ -89,11 +89,10 @@ flowchart TB
 │   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 │   ├── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
-│   ├── nyctaxi_permissions.yml     # ロール別のスキーマ grants（組織構成のコード化）
-│   └── nyctaxi_viewer_grant_job.yml  # Job 定義（閲覧者ロールへテーブル単位の権限付与）
+│   └── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
 ├── notebooks/
 │   ├── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
-│   └── grant_viewer_access.py      # 閲覧者ロールへの GRANT を発行する Notebook
+│   └── grant_role_access.py        # 3ロールへの GRANT を発行する Notebook
 ├── pipelines/
 │   ├── nyctaxi_pipeline.py         # bronze(Auto Loader) / silver / gold を宣言する Python（dlt 依存）
 │   └── transforms.py               # 変換ロジック本体（純粋関数、pytest でテスト可能）
@@ -109,7 +108,7 @@ flowchart TB
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
 - Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（ランディングゾーンへの CSV 到着を検知する File arrival トリガー）
 - Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
-- Job: `nyctaxi_viewer_grant_job` — 閲覧者ロールへ `trips_daily_gold` の SELECT 権限を付与する（手動実行用）
+- Job: `nyctaxi_permissions_job` — データエンジニア/アナリスト/閲覧者の3ロールへ権限を付与する（手動実行用）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -236,45 +235,42 @@ Databricks Free Edition はアカウントコンソール・SCIM・SSO が使え
 
 想定しているロールと、事前に作成しておく必要があるグループ:
 
-| ロール | グループ名 | 権限 | 管理方法 |
-| --- | --- | --- | --- |
-| データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） | DAB（`resources/nyctaxi_permissions.yml` の `grants`） |
-| アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） | DAB（同上） |
-| 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） | 一時的な SQL GRANT（後述） |
+| ロール | グループ名 | 権限 |
+| --- | --- | --- |
+| データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） |
+| アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） |
+| 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） |
 
-### スキーマ単位の権限（DAB 管理）
+### なぜ DAB の `grants` ではなく SQL GRANT で管理しているか
 
-`resources/nyctaxi_permissions.yml` で `nyctaxi` スキーマに対する `grants` を宣言している。
-デプロイするだけでデータエンジニア・アナリストの権限は反映される。
+当初は `resources.schemas` の `grants` でスキーマ単位の権限を DAB 管理する設計を
+試みたが、`nyctaxi` スキーマは `nyctaxi_pipeline` の初回実行時に**バンドル管理外で
+自動作成済み**だったため、同名のスキーマを `resources.schemas` として宣言すると
 
-```yaml
-resources:
-  schemas:
-    nyctaxi_schema:
-      name: nyctaxi
-      catalog_name: workspace
-      grants:
-        - principal: nyctaxi-data-engineers
-          privileges: [ALL_PRIVILEGES]
-        - principal: nyctaxi-analysts
-          privileges: [USE_SCHEMA, SELECT]
+```
+Error: cannot create resources.schemas.nyctaxi_schema: Schema 'nyctaxi' already exists (400 SCHEMA_ALREADY_EXISTS)
 ```
 
-### テーブル単位の権限（DAB の制約 → 一時的な SQL で補う）
+というエラーでデプロイが失敗した。スキーマを一度削除して DAB 管理下で作り直す
+選択肢もあるが、それでは既存の bronze/silver/gold テーブルと Auto Loader の
+取り込み状態を失ってしまうため避けた（`databricks bundle deployment bind` で
+既存リソースを取り込む方法もあるが、学習用途としてはそこまで踏み込まず、
+明示的な SQL GRANT に倒している）。
 
-DAB の `grants` は **スキーマ単位まで**しか宣言できず、個別テーブルに対する
-grants リソースは存在しない。そのため「閲覧者には `trips_daily_gold` だけ見せたい」
-という要件は DAB だけでは表現できず、`notebooks/grant_viewer_access.py` で
-明示的な `GRANT SELECT ON TABLE ...` を発行している。
+また、そもそも DAB の `grants` は **スキーマ単位まで**しか宣言できず、
+「閲覧者には `trips_daily_gold` だけ見せたい」というテーブル単位の制御は
+DAB だけでは表現できない。
+
+そのため 3 ロールすべての権限付与を `notebooks/grant_role_access.py`
+（`nyctaxi_permissions_job` から実行）に統一し、明示的な SQL GRANT として発行している。
 
 ```bash
-databricks bundle run nyctaxi_viewer_grant_job -t dev
+databricks bundle run nyctaxi_permissions_job -t dev
 ```
 
 - `trips_daily_gold` が作成された後（`nyctaxi_pipeline` を一度実行した後）に実行すること
 - 何度実行しても安全（べき等）
-- `nyctaxi-viewers` グループを作り直したときは再実行すること
-
+- グループを作り直したときは再実行すること
 ## デプロイ方法は3通り
 
 - **A. ワークスペース UI（Bundle エディタ）からデプロイ** — ローカルに何もインストール不要。おすすめ
