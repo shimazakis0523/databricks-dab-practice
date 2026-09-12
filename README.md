@@ -14,8 +14,13 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 │   └── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 ├── notebooks/
 │   └── hello_world.py              # Hello World を出力する Notebook
-└── pipelines/
-    └── nyctaxi_pipeline.py         # bronze / silver / gold を宣言する Python
+├── pipelines/
+│   ├── nyctaxi_pipeline.py         # bronze / silver / gold を宣言する Python（dlt 依存）
+│   └── transforms.py               # 変換ロジック本体（純粋関数、pytest でテスト可能）
+├── tests/
+│   ├── conftest.py                 # ローカル SparkSession フィクスチャ
+│   └── test_transforms.py          # transforms.py のユニットテスト
+└── requirements-test.txt           # テスト用依存関係（pyspark, pytest）
 ```
 
 - Job: `hello_world_job` — タスク `hello_world_task` が `notebooks/hello_world.py` を実行
@@ -57,6 +62,32 @@ SQL エディタから確認できます。
 
 ```sql
 SELECT * FROM workspace.nyctaxi.trips_daily_gold ORDER BY trip_count DESC LIMIT 20;
+```
+
+### 変換ロジックとユニットテスト
+
+`dlt` モジュールは Databricks の Lakeflow Declarative Pipelines 実行環境でしか
+import できないため、`nyctaxi_pipeline.py` そのものは手元や CI で直接テストできません。
+そこで変換ロジック（乗車時間・距離あたり運賃の計算、品質ルール、日次集計）を
+`pipelines/transforms.py` に純粋関数として切り出し、`nyctaxi_pipeline.py` からは
+通常の Python import で参照する構成にしています。
+
+```python
+# nyctaxi_pipeline.py
+from transforms import QUALITY_EXPECTATIONS, add_trip_metrics, aggregate_daily
+```
+
+Lakeflow Declarative Pipelines はパイプラインのルートディレクトリを自動的に
+`sys.path` へ追加するため、この import はデプロイ後もそのまま動作します
+（`resources/nyctaxi_pipeline.yml` の `libraries` は `glob` で
+`pipelines/*.py` をまとめて配置しています）。
+
+`pipelines/transforms.py` は `tests/test_transforms.py` からローカルの PySpark で
+テストできます。
+
+```bash
+pip install -r requirements-test.txt
+pytest tests/ -v
 ```
 
 ## デプロイ方法は3通り
@@ -189,8 +220,12 @@ databricks bundle destroy -t dev
 
 `.github/workflows/deploy.yml` に、以下を行う GitHub Actions ワークフローを用意しています。
 
-- Pull Request 作成時: `databricks bundle validate -t dev` を実行してバンドルの構文・参照エラーを検知
-- `main` への push 時: validate 後に `databricks bundle deploy -t dev` を実行して自動デプロイ
+- Pull Request 作成時・`main` への push 時: `pytest tests/`（ユニットテスト）と
+  `databricks bundle validate -t dev`（バンドルの構文・参照チェック）を並行実行
+- `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev` を実行して自動デプロイ
+
+`deploy` ジョブは `test` と `validate` の両方に依存しているため、
+ユニットテストが落ちていればデプロイは走りません。
 
 コンピュートは Actions の実行環境（GitHub 側）でのみ動くので、CI/CD 自体は
 Databricks 側のサーバーレス枠をほとんど消費しません（実際にジョブやパイプラインを

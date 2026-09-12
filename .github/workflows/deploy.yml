@@ -1,7 +1,7 @@
 name: Deploy Databricks Bundle
 
 # main への push で dev ターゲットへ自動デプロイする。
-# Pull Request では validate のみ実行し、実際のデプロイは行わない。
+# Pull Request では test / validate のみ実行し、実際のデプロイは行わない。
 on:
   push:
     branches:
@@ -11,6 +11,23 @@ on:
       - main
 
 jobs:
+  test:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Run pytest
+        run: pytest tests/ -v
+
   validate:
     name: Validate bundle
     runs-on: ubuntu-latest
@@ -29,7 +46,7 @@ jobs:
 
   deploy:
     name: Deploy to dev
-    needs: validate
+    needs: [test, validate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

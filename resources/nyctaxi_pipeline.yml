@@ -7,5 +7,8 @@ resources:
       catalog: workspace
       schema: nyctaxi
       libraries:
-        - notebook:
-            path: ../pipelines/nyctaxi_pipeline.py
+        # nyctaxi_pipeline.py と transforms.py（変換ロジック）をまとめて配置する。
+        # 同じディレクトリに置くことで nyctaxi_pipeline.py から
+        # `from transforms import ...` として通常の Python import で参照できる。
+        - glob:
+            include: ../pipelines/*.py

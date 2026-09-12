@@ -5,11 +5,14 @@
 # MAGIC bronze → silver → gold の3層を宣言的に定義します。
 # MAGIC
 # MAGIC ソースデータ: `samples.nyctaxi.trips`（Databricks に最初から用意されているサンプル）
+# MAGIC
+# MAGIC 変換ロジックは `transforms.py` に切り出してあり、pytest でユニットテスト済みです。
 
 # COMMAND ----------
 
 import dlt
-from pyspark.sql import functions as F
+
+from transforms import QUALITY_EXPECTATIONS, add_trip_metrics, aggregate_daily
 
 # COMMAND ----------
 
@@ -40,27 +43,9 @@ def trips_bronze():
     name="trips_silver",
     comment="不正なレコードを除外し、乗車時間と距離あたり運賃を付与した明細",
 )
-@dlt.expect_all_or_drop(
-    {
-        "valid_fare": "fare_amount > 0",
-        "valid_distance": "trip_distance > 0",
-        "valid_period": "tpep_dropoff_datetime > tpep_pickup_datetime",
-    }
-)
+@dlt.expect_all_or_drop(QUALITY_EXPECTATIONS)
 def trips_silver():
-    return (
-        dlt.read("trips_bronze")
-        .withColumn("pickup_date", F.to_date("tpep_pickup_datetime"))
-        .withColumn(
-            "trip_minutes",
-            (
-                F.unix_timestamp("tpep_dropoff_datetime")
-                - F.unix_timestamp("tpep_pickup_datetime")
-            )
-            / 60,
-        )
-        .withColumn("fare_per_mile", F.col("fare_amount") / F.col("trip_distance"))
-    )
+    return add_trip_metrics(dlt.read("trips_bronze"))
 
 
 # COMMAND ----------
@@ -76,13 +61,4 @@ def trips_silver():
     comment="乗車日 × 乗車 ZIP ごとの件数・平均運賃・平均距離",
 )
 def trips_daily_gold():
-    return (
-        dlt.read("trips_silver")
-        .groupBy("pickup_date", "pickup_zip")
-        .agg(
-            F.count("*").alias("trip_count"),
-            F.round(F.avg("fare_amount"), 2).alias("avg_fare"),
-            F.round(F.avg("trip_distance"), 2).alias("avg_distance"),
-            F.round(F.avg("trip_minutes"), 1).alias("avg_trip_minutes"),
-        )
-    )
+    return aggregate_daily(dlt.read("trips_silver"))
