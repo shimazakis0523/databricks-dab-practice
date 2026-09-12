@@ -21,9 +21,10 @@ Hello World を出力する Notebook と Job、および NYC タクシーデー�
 │   ├── nyctaxi_pipeline.py         # bronze(Auto Loader) / silver / gold を宣言する Python（dlt 依存）
 │   └── transforms.py               # 変換ロジック本体（純粋関数、pytest でテスト可能）
 ├── tests/
-│   ├── conftest.py                 # ローカル SparkSession フィクスチャ
-│   └── test_transforms.py          # transforms.py のユニットテスト
-└── requirements-test.txt           # テスト用依存関係（pyspark, pytest）
+│   ├── conftest.py                    # ローカル SparkSession フィクスチャ
+│   ├── test_transforms.py             # transforms.py のユニットテスト
+│   └── test_resource_conventions.py   # resources/*.yml の命名規則チェック（再発防止）
+└── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 ```
 
 - Job: `hello_world_job` — タスク `hello_world_task` が `notebooks/hello_world.py` を実行
@@ -299,3 +300,33 @@ Pull Request 上では `validate` のみが走り、デプロイは行われま�
 - `mode: development` のため、デプロイされるリソース名には `[dev <ユーザー名>]` の接頭辞が付き、
   スケジュールは一時停止された状態になります。学習用途で他のユーザーと衝突しないための仕組みです。
 - Free Edition ではサーバーレスコンピュートが自動的に使用されます。
+
+## 開発時の注意点（過去に踏んだ落とし穴）
+
+### UC のカタログ / スキーマ参照は必ず文字列リテラルで統一する
+
+`mode: development` は、Job・Pipeline の**表示名**には `[dev <ユーザー名>]` を
+先頭に付けるだけだが、`resources.schemas` / `resources.catalogs` として
+バンドル管理した Unity Catalog スキーマ・カタログは、**物理名そのもの**を
+`dev_<ユーザー名>_<name>` にリネームする。
+
+この違いに気づかず、あるリソースは `schema: nyctaxi`（文字列リテラル）、
+別のリソースは `schema_name: ${resources.schemas.nyctaxi_schema.name}`
+（DAB 管理リソースの動的参照）という書き方を混在させたところ、
+前者は `nyctaxi`、後者は `dev_recrpm33_nyctaxi` という**別のスキーマ**に
+デプロイされてしまい、Auto Loader のパス (`/Volumes/workspace/nyctaxi/landing`)
+が実体と一致しないバグを起こした。
+
+**ルール**: 同じ UC オブジェクトを指すつもりの `catalog` / `schema` /
+`catalog_name` / `schema_name` は、すべて文字列リテラルで書く
+（`resources.schemas` / `resources.catalogs` の動的参照を使わない）。
+このバンドルでは、Unity Catalog のスキーマはパイプラインの初回実行時に
+自動作成される前提で、`resources/nyctaxi_pipeline.yml` と
+`resources/nyctaxi_landing.yml` の両方で `catalog: workspace` /
+`schema(_name): nyctaxi` を文字列リテラルとして揃えている。
+
+この規約は `tests/test_resource_conventions.py` の
+`test_schema_and_catalog_references_are_literal_strings` で機械的に
+チェックしており、`resources/*.yml` のどこかで
+`${resources.schemas...}` / `${resources.catalogs...}` を
+catalog/schema 系フィールドの値に使うと CI の `test` ジョブが失敗する。
