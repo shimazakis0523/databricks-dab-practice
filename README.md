@@ -19,6 +19,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 6 | Databricks 実行環境に依存しない変換ロジックの単体テスト | `pipelines/transforms.py`, `tests/test_transforms.py` |
 | 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
 | 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
+| 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）を DAB の grants としてコード管理 | `resources/nyctaxi_permissions.yml`, `resources/nyctaxi_viewer_grant_job.yml` |
 
 ## 全体構成図
 
@@ -87,9 +88,12 @@ flowchart TB
 │   ├── nyctaxi_landing.yml         # ランディング用 Volume 定義
 │   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
-│   └── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
+│   ├── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
+│   ├── nyctaxi_permissions.yml     # ロール別のスキーマ grants（組織構成のコード化）
+│   └── nyctaxi_viewer_grant_job.yml  # Job 定義（閲覧者ロールへテーブル単位の権限付与）
 ├── notebooks/
-│   └── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
+│   ├── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
+│   └── grant_viewer_access.py      # 閲覧者ロールへの GRANT を発行する Notebook
 ├── pipelines/
 │   ├── nyctaxi_pipeline.py         # bronze(Auto Loader) / silver / gold を宣言する Python（dlt 依存）
 │   └── transforms.py               # 変換ロジック本体（純粋関数、pytest でテスト可能）
@@ -105,6 +109,7 @@ flowchart TB
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
 - Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（ランディングゾーンへの CSV 到着を検知する File arrival トリガー）
 - Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
+- Job: `nyctaxi_viewer_grant_job` — 閲覧者ロールへ `trips_daily_gold` の SELECT 権限を付与する（手動実行用）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -220,6 +225,55 @@ Lakeflow Declarative Pipelines はパイプラインのルートディレクト�
 pip install -r requirements-test.txt
 pytest tests/ -v
 ```
+
+## 組織/権限管理（ロールベースアクセス）
+
+「組織のロール構成を DAB でどう再現するか」を検証するパートです。
+Databricks Free Edition はアカウントコンソール・SCIM・SSO が使えないため、
+グループはワークスペースの **Settings > Identity and access > Groups > Add group**
+から手動で作成する必要があります（DAB はグループそのものは作成できません。
+既存のグループに対する権限付与だけを管理します）。
+
+想定しているロールと、事前に作成しておく必要があるグループ:
+
+| ロール | グループ名 | 権限 | 管理方法 |
+| --- | --- | --- | --- |
+| データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） | DAB（`resources/nyctaxi_permissions.yml` の `grants`） |
+| アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） | DAB（同上） |
+| 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） | 一時的な SQL GRANT（後述） |
+
+### スキーマ単位の権限（DAB 管理）
+
+`resources/nyctaxi_permissions.yml` で `nyctaxi` スキーマに対する `grants` を宣言している。
+デプロイするだけでデータエンジニア・アナリストの権限は反映される。
+
+```yaml
+resources:
+  schemas:
+    nyctaxi_schema:
+      name: nyctaxi
+      catalog_name: workspace
+      grants:
+        - principal: nyctaxi-data-engineers
+          privileges: [ALL_PRIVILEGES]
+        - principal: nyctaxi-analysts
+          privileges: [USE_SCHEMA, SELECT]
+```
+
+### テーブル単位の権限（DAB の制約 → 一時的な SQL で補う）
+
+DAB の `grants` は **スキーマ単位まで**しか宣言できず、個別テーブルに対する
+grants リソースは存在しない。そのため「閲覧者には `trips_daily_gold` だけ見せたい」
+という要件は DAB だけでは表現できず、`notebooks/grant_viewer_access.py` で
+明示的な `GRANT SELECT ON TABLE ...` を発行している。
+
+```bash
+databricks bundle run nyctaxi_viewer_grant_job -t dev
+```
+
+- `trips_daily_gold` が作成された後（`nyctaxi_pipeline` を一度実行した後）に実行すること
+- 何度実行しても安全（べき等）
+- `nyctaxi-viewers` グループを作り直したときは再実行すること
 
 ## デプロイ方法は3通り
 

@@ -1,0 +1,31 @@
+resources:
+  schemas:
+    nyctaxi_schema:
+      # 名前は nyctaxi_pipeline.yml / nyctaxi_landing.yml が文字列で直接参照している
+      # スキーマと同じ "workspace.nyctaxi"。このリソースはスキーマそのものを
+      # 作るためではなく（既にパイプラインが自動作成する）、そこに対する
+      # ロールベースの grants を宣言的に管理するために定義している。
+      name: nyctaxi
+      catalog_name: workspace
+      comment: NYC タクシーパイプラインの出力スキーマ（bronze/silver/gold + landing volume）
+
+      # 組織のロールをそのまま Databricks のグループとして再現し、
+      # スキーマ単位の権限を DAB でコード管理する。
+      # グループ自体は Free Edition の制約上ワークスペース側で事前に作成しておく
+      # 必要がある（Workspace Settings > Identity and access > Groups > Add group）。
+      grants:
+        # データエンジニア: パイプライン/Job のデプロイ・運用を行う。フルアクセス。
+        - principal: nyctaxi-data-engineers
+          privileges:
+            - ALL_PRIVILEGES
+        # アナリスト: bronze/silver/gold すべてを参照して分析できる。書き込みは不可。
+        - principal: nyctaxi-analysts
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+
+# 閲覧者ロール（nyctaxi-viewers）には trips_daily_gold だけを見せたいが、
+# DAB の grants はスキーマ単位までしか宣言できない（テーブル単位の grants
+# リソースは存在しない）。そのため、閲覧者向けのテーブル単位の権限は
+# notebooks/grant_viewer_access.py + resources/nyctaxi_viewer_grant_job.yml で
+# 明示的な SQL GRANT として別途管理している。
