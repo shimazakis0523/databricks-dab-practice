@@ -11,7 +11,13 @@
   所属する各グループの entitlements（の和集合）を比較する
 - 直接付与分がグループ経由の分でカバーされていなければ報告する
 
-ノート: 実際にワークスペースを管理しているアカウント（作成者/オーナー）は、
+ノート1: Databricks はユーザー作成時に最低1つの直接 entitlement
+（多くの場合 `workspace-consume` = Consumer access）を要求するため、
+このスクリプトはそれを「回避不可能な直接付与」として常に許容する
+（`resources/groups.json` の全グループにも `workspace-consume` を
+含めているので、通常はグループ経由でカバーされて検知されない）。
+
+ノート2: 実際にワークスペースを管理しているアカウント（作成者/オーナー）は、
 `admins` グループなどを通じて、あるいは直接、`nyctaxi-*` グループの管理外の
 entitlements を持っているのが正常なケースが多い。誤検知で CI を止めないよう、
 このスクリプトは常に exit code 0 で終了し、レポートの出力のみを行う。
@@ -25,6 +31,10 @@ import os
 import sys
 
 from scim_client import GROUPS_PATH, USERS_PATH, list_all
+
+# Databricks の仕様上、ユーザーには最低1つの直接 entitlement が必須で回避できない。
+# これをドリフトとして報告しないよう、常に許容する。
+UNAVOIDABLE_DIRECT_ENTITLEMENTS = {"workspace-consume"}
 
 
 def main() -> int:
@@ -50,7 +60,7 @@ def main() -> int:
         for gid in member_group_ids:
             inherited |= group_entitlements_by_id.get(gid, set())
 
-        extra = direct - inherited
+        extra = direct - inherited - UNAVOIDABLE_DIRECT_ENTITLEMENTS
         if extra:
             user_name = user.get("userName", user.get("id"))
             group_names = [group_name_by_id.get(gid, gid) for gid in member_group_ids]
@@ -61,11 +71,16 @@ def main() -> int:
         return 0
 
     print(
-        f"[audit_user_entitlements] グループ経由ではない直接 entitlements を"
-        f" {len(findings)} 名のユーザーで検出しました（自動修正はしていません）:"
+        f"[audit_user_entitlements] グループ経由でカバーされていない直接 entitlements を"
+        f" {len(findings)} 名のユーザーで検出しました（自動修正はしていません）。"
+        f" 問題があるのは「直接付与」欄の entitlements のみで、所属グループ自体は"
+        f" 正常な状態です（グループへの所属は禁止行為ではありません）:"
     )
     for user_name, extra, group_names in findings:
-        print(f"  - {user_name}: 直接付与 {extra} / 所属グループ {group_names}")
+        print(
+            f"  - {user_name}: グループでカバーされていない直接付与 {extra}"
+            f"（参考: 所属グループ {group_names} はそのままで問題ありません）"
+        )
 
     return 0
 

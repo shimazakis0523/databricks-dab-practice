@@ -60,3 +60,12 @@ README を更新し忘れると CI が落ちる。
   （`scripts/audit_user_entitlements.py`）自動修正はしない。ワークスペースの
   オーナー/管理者アカウントなど、正当な理由で直接権限を持つ場合があるため。
   このスクリプトは常に exit code 0 で終了する仕様を変えない。
+- Databricks はユーザー作成時に最低1つの直接 entitlement（多くの場合
+  `workspace-consume` = Consumer access）を要求し、これは回避できない。
+  「グループ経由で継承させ、直接付与はゼロにする」という理想を額面通り
+  実装しようとしない。`workspace-consume` は
+  `scripts/audit_user_entitlements.py` の `UNAVOIDABLE_DIRECT_ENTITLEMENTS`
+  として常に許容し、かつ `resources/groups.json` の全グループにも含めて
+  グループ経由でカバーされるようにする、という二重の対策を踏襲する。
+  監査レポートの文言は「グループでカバーされていない直接付与」だけを
+  問題として示し、所属グループ自体が悪いように読める書き方をしない。

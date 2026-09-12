@@ -318,6 +318,15 @@ python3 scripts/audit_undeclared_groups.py --dry-run # 検知のみ
 entitlements のうち、本人が所属するどのグループの entitlements にも
 含まれないものを検知して報告する。
 
+> **Databricks の制約**: ユーザー作成時に最低1つの直接 entitlement
+> （多くの場合 `workspace-consume` = Consumer access）が必須で、
+> これは回避できない。そのため `workspace-consume` は「回避不可能な
+> 直接付与」として常に許容し、`resources/groups.json` の全グループにも
+> 含めることでグループ経由でカバーされるようにしている。
+> レポートで「直接付与」として指摘されるのは、あくまで**グループの
+> entitlements でカバーされていない分だけ**であり、所属グループ自体が
+> 問題視されているわけではない（グループへの所属は禁止行為ではない）。
+
 - **自動修正はしない**。ワークスペースのオーナー/管理者アカウントなど、
   `nyctaxi-*` グループの管理外で正当に entitlements を持つケースを
   誤って剥奪しないようにするため
