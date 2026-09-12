@@ -308,16 +308,26 @@ resources:
 
 - 単一クエリウィジェットの `queries[].name` を任意の名前にしていたため
   `Missing query "main_query"` エラーになった（固定で `main_query` にする必要がある）
-- table ウィジェットの `encodings.columns` の日付列に `"type": "datetime"`
-  を指定していたため `Invalid widget definition is imported` エラーになった
-  （`type` フィールド自体はあったが値が無効だった。正しくは `"date"` +
-  `dateTimeFormat`）
+- table ウィジェットの `encodings.columns` の日付列の `type` に誤った値を
+  指定し、`Invalid widget definition is imported` エラーになった。
+  最初は `"datetime"` を指定していたが、これを誤って `"date"`（存在しない値）
+  に「修正」してしまい、かえって規約違反を悪化させたこともある。
+  実際にワークスペースがエクスポートした `.lvdash.json` で確認できる
+  正しい値は **`"datetime"`**（`dateTimeFormat` を併記する）
+- table ウィジェットの各列は `type` 以外にも、実エクスポート例が常に持つ
+  一群のフィールド（`booleanValues` / `imageUrlTemplate` /
+  `linkUrlTemplate` / `allowSearch` / `highlightLinks` /
+  `useMonospaceFont` / `preserveWhitespace` / `displayName` など）を
+  省略すると、`type` の値が正しくても同じエラーになることがあった
 
-`type` は「フィールドが存在するか」だけでなく「値が Lakeview の許容する
-ものか」まで確認しないと同じ失敗を繰り返す。これらの既知の規約違反は
+`type` は「フィールドが存在するか」「値が Lakeview の許容するものか」
+「列オブジェクトが実エクスポート例と同じ必須フィールド一式を持っているか」
+まで確認しないと同じ失敗を繰り返す。これらの既知の規約違反は
 `tests/test_dashboard_conventions.py` で機械的にチェックしている。
 それ以外の描画エラーが出た場合は、`databricks bundle deploy` の
-エラーメッセージに従ってウィジェット定義を修正し、同テストに規約を追記すること。
+エラーメッセージだけでは原因がわからないことが多いため、GitHub 上の
+実際にエクスポートされた `.lvdash.json`（例: `databricks/tmm` リポジトリの
+サンプル）と比較してウィジェット定義を修正し、同テストに規約を追記すること。
 
 ## 組織/権限管理（ロールベースアクセス）
 

@@ -67,19 +67,29 @@ README を更新し忘れると CI が落ちる。
   README の「開発時の注意点」を参照。`tests/test_resource_conventions.py`
   がこれも機械的にチェックする。
 - Lakeview ダッシュボード（`dashboards/*.lvdash.json`）は `databricks bundle
-  validate` では JSON 構文しか検証されず、Lakeview 固有のスキーマ規約
-  （例: 単一クエリウィジェットの `queries[].name` は固定で `main_query` に
-  する必要がある、table ウィジェットの `encodings.columns` の `type` は
-  日付列なら `"datetime"` ではなく `"date"` + `dateTimeFormat` を使う必要が
-  あるなど、**フィールドの存在だけでなく値そのものが Lakeview の許容する
-  ものか**、など）は実際にワークスペースへデプロイしてレンダリングするまで
-  検知できない。「`type` フィールドがあるか」だけをチェックしても、値が
-  無効なら結局実ワークスペースで "Invalid widget definition is imported"
-  になる（実際に一度これで見逃した）。手書きで `.lvdash.json` を追加・変更
-  した場合は、既知の規約違反を機械的にチェックする
-  `tests/test_dashboard_conventions.py` を必ず通し、実ワークスペースでの
-  表示確認をユーザーに依頼すること。新しい描画エラーに遭遇したら、
-  「フィールドの存在」ではなく「値の妥当性」まで踏み込んだ検証として
+  validate` では JSON 構文しか検証されず、Lakeview 固有のスキーマ規約は
+  実際にワークスペースへデプロイしてレンダリングするまで検知できない。
+  過去に3段階で見逃した:
+  1. 単一クエリウィジェットの `queries[].name` を任意の名前にしていた
+     （固定で `main_query` にする必要がある）
+  2. table ウィジェットの `encodings.columns` の `type` に無効な値を
+     指定していた。**しかも一度、これを直そうとして `"datetime"`（正しい値）
+     を `"date"`（存在しない値）に「修正」し、かえって悪化させたことがある**
+  3. `type` の値が正しくても、列オブジェクトに実エクスポート例が常に持つ
+     一群のフィールド（`booleanValues` / `imageUrlTemplate` /
+     `linkUrlTemplate` / `allowSearch` など、詳細は
+     `tests/test_dashboard_conventions.py` 参照）が欠けていると、
+     同じ "Invalid widget definition is imported" になる
+
+  根本原因は、Lakeview の非公開スキーマを記憶や推測（web 検索の要約）だけで
+  埋めようとしたこと。**新しいフィールド・値を追加/修正する際は、GitHub 上の
+  実際にワークスペースがエクスポートした `.lvdash.json`（例:
+  `databricks/tmm` リポジトリのサンプル）を取得し、対応するウィジェット/列の
+  JSON を verbatim で確認してから反映すること**（要約・推測に頼らない）。
+  手書きで `.lvdash.json` を追加・変更した場合は、既知の規約違反を機械的に
+  チェックする `tests/test_dashboard_conventions.py` を必ず通し、
+  実ワークスペースでの表示確認をユーザーに依頼すること。新しい描画エラーに
+  遭遇したら、実エクスポート例で正しい値/必須フィールドを確認したうえで
   同テストに追記して再発を防ぐ。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
