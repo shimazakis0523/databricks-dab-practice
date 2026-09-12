@@ -18,6 +18,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 5 | GitHub Actions による CI/CD（テスト → validate → deploy の自動化） | `.github/workflows/deploy.yml` |
 | 6 | Databricks 実行環境に依存しない変換ロジックの単体テスト | `pipelines/transforms.py`, `tests/test_transforms.py` |
 | 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
+| 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
 
 ## 全体構成図
 
@@ -95,8 +96,10 @@ flowchart TB
 ├── tests/
 │   ├── conftest.py                    # ローカル SparkSession フィクスチャ
 │   ├── test_transforms.py             # transforms.py のユニットテスト
-│   └── test_resource_conventions.py   # resources/*.yml の命名規則チェック（再発防止）
-└── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
+│   ├── test_resource_conventions.py   # resources/*.yml の命名規則チェック（再発防止）
+│   └── test_readme_sync.py            # README.md の更新漏れチェック（再発防止）
+├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
+└── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
 
 - Pipeline: `nyctaxi_pipeline` — Lakeflow Declarative Pipelines（旧 Delta Live Tables）
