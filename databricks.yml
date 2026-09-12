@@ -5,6 +5,16 @@ bundle:
 include:
   - resources/*.yml
 
+variables:
+  # BI ダッシュボード（resources/nyctaxi_dashboard.yml）が使う SQL Warehouse の ID。
+  # ワークスペースごとに異なる値のため、コードに直書きせず変数として切り出し、
+  # 別のワークスペースにデプロイする場合は上書きできるようにしている。
+  # 上書き方法: `databricks bundle deploy --var="warehouse_id=<別のID>"` または
+  # 環境変数 `BUNDLE_VAR_warehouse_id`
+  warehouse_id:
+    description: BI ダッシュボードが参照する SQL Warehouse の ID
+    default: "6a598981a672a44a"
+
 targets:
   dev:
     # mode: development を指定しない = 本番相当のデプロイ。

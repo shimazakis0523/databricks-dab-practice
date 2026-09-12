@@ -1,0 +1,11 @@
+resources:
+  dashboards:
+    nyctaxi_gold_dashboard:
+      display_name: "NYC Taxi Daily Overview"
+      file_path: ../dashboards/nyctaxi_gold_dashboard.lvdash.json
+      # ワークスペースごとに異なる値のため databricks.yml の変数として管理する。
+      # 既定値は Free Edition のサーバーレス SQL Warehouse（Serverless Starter
+      # Warehouse）。別のワークスペースにデプロイする場合は、変数を上書きするか
+      # databricks.yml の default を書き換えること。
+      warehouse_id: ${var.warehouse_id}
+      embed_credentials: false

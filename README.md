@@ -22,6 +22,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）をコードで再現し権限を管理 | `resources/nyctaxi_permissions_job.yml`, `notebooks/grant_role_access.py` |
 | 10 | グループ作成・entitlements 付与を手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.json`, `scripts/ensure_groups.py` |
 | 11 | IaC に無いグループの自動検知・削除、グループ経由でない直接権限の監査（ガバナンスのドリフト検知） | `scripts/audit_undeclared_groups.py`, `scripts/audit_user_entitlements.py` |
+| 12 | gold テーブルの BI ダッシュボードを DAB リソースとして宣言的に管理 | `resources/nyctaxi_dashboard.yml`, `dashboards/nyctaxi_gold_dashboard.lvdash.json` |
 
 ## 全体構成図
 
@@ -54,6 +55,8 @@ flowchart TB
         end
 
         NyctaxiJob["Job: nyctaxi_job\nFile arrival トリガー"]
+
+        Dashboard["Dashboard: nyctaxi_gold_dashboard\nカウンター/折れ線/棒グラフ/テーブル"]
     end
 
     Push --> Test
@@ -64,6 +67,7 @@ flowchart TB
     Volume -.->|"新規ファイル到着を検知"| NyctaxiJob
     NyctaxiJob -->|"pipeline_task"| Pipeline
     Volume -->|"Auto Loader\ncloudFiles"| Bronze
+    Gold -->|"SQL Warehouse で参照"| Dashboard
 ```
 
 ### データの流れ（実行時）
@@ -74,6 +78,8 @@ flowchart TB
 4. `trips_bronze`（Auto Loader）が未取り込みの CSV だけを増分で読み込む（文字列のまま）
 5. `trips_silver` が型変換・品質チェックを行い、乗車時間や距離あたり運賃を付与
 6. `trips_daily_gold` が日次 × 乗車 ZIP で集計
+7. `nyctaxi_gold_dashboard` が SQL Warehouse 経由で `trips_daily_gold` を参照し、
+   BI ダッシュボードとして可視化する
 
 ### デプロイの流れ（コード変更時）
 
@@ -92,7 +98,10 @@ flowchart TB
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 │   ├── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
 │   ├── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
-│   └── groups.json                 # ワークスペースグループと entitlements の一覧
+│   ├── groups.json                 # ワークスペースグループと entitlements の一覧
+│   └── nyctaxi_dashboard.yml       # gold テーブルの BI ダッシュボード定義
+├── dashboards/
+│   └── nyctaxi_gold_dashboard.lvdash.json  # Lakeview ダッシュボード本体（データセット/ページ/ウィジェット）
 ├── scripts/
 │   ├── scim_client.py               # SCIM API 共通ヘルパー（他の scripts/*.py から import）
 │   ├── ensure_groups.py             # groups.json のグループ作成・entitlements 同期（CI から実行）
@@ -118,6 +127,7 @@ flowchart TB
 - Job: `nyctaxi_job` — `pipeline_task` で上記パイプラインを起動（ランディングゾーンへの CSV 到着を検知する File arrival トリガー）
 - Job: `nyctaxi_seed_job` — ランディングゾーンへ CSV を投入する（手動実行用）
 - Job: `nyctaxi_permissions_job` — データエンジニア/アナリスト/閲覧者の3ロールへ権限を付与する（手動実行用）
+- Dashboard: `nyctaxi_gold_dashboard` — `trips_daily_gold` を可視化する Lakeview（AI/BI）ダッシュボード
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -233,6 +243,66 @@ Lakeflow Declarative Pipelines はパイプラインのルートディレクト�
 pip install -r requirements-test.txt
 pytest tests/ -v
 ```
+
+## BI ダッシュボード（nyctaxi_gold_dashboard）
+
+`trips_daily_gold`（gold テーブル）を可視化する Lakeview（AI/BI）ダッシュボードを、
+Notebook/Job と同様に DAB リソースとして宣言的に管理しています。
+
+- `resources/nyctaxi_dashboard.yml` — ダッシュボードリソース定義（表示名・SQL Warehouse・本体ファイルへのパス）
+- `dashboards/nyctaxi_gold_dashboard.lvdash.json` — ダッシュボード本体（データセット・ページ・ウィジェットの定義）
+
+含まれるウィジェット:
+
+| ウィジェット | 内容 |
+| --- | --- |
+| カウンター | 総トリップ数（`SUM(trip_count)`） |
+| 折れ線グラフ | 日次トリップ数の推移 |
+| 棒グラフ | 乗車 ZIP ごとの平均運賃 |
+| テーブル | `trips_daily_gold` の明細（乗車日・乗車ZIP・件数・平均運賃・平均距離・平均乗車時間） |
+
+```yaml
+resources:
+  dashboards:
+    nyctaxi_gold_dashboard:
+      display_name: "NYC Taxi Daily Overview"
+      file_path: ../dashboards/nyctaxi_gold_dashboard.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      embed_credentials: false
+```
+
+- `warehouse_id` はワークスペースごとに異なる値のため、`databricks.yml` の
+  変数（`variables.warehouse_id`）として管理し、直書きしていない。既定値は
+  Free Edition のサーバーレス SQL Warehouse（Serverless Starter Warehouse）:
+
+  ```yaml
+  variables:
+    warehouse_id:
+      description: BI ダッシュボードが参照する SQL Warehouse の ID
+      default: "6a598981a672a44a"
+  ```
+
+  別のワークスペースにデプロイする場合、**SQL Warehouses 画面 > 対象
+  Warehouse > Connection details** に表示される Warehouse ID を控え、
+  以下のどちらかで上書きする（`databricks.yml` 自体は書き換えなくてよい）:
+
+  ```bash
+  databricks bundle deploy -t dev --var="warehouse_id=<別のID>"
+  # または
+  BUNDLE_VAR_warehouse_id=<別のID> databricks bundle deploy -t dev
+  ```
+
+- `trips_daily_gold` が作成された後（`nyctaxi_pipeline` を一度実行した後）に
+  デプロイ・閲覧すること。テーブルが無い状態だとクエリがエラーになる
+- ワークスペースの **Dashboards** 画面からデプロイ後の
+  `[dev <ユーザー名>] NYC Taxi Daily Overview`（または `NYC Taxi Daily Overview`。
+  現在の運用では `mode: development` を使っていないため接頭辞は付かない）
+  を開いて確認する
+
+`.lvdash.json` はコードから手書きしたものであり、実際にワークスペースへ
+デプロイして初めてウィジェットの表示が正しいか確認できる。デプロイ時に
+スキーマエラーが出た場合は、`databricks bundle deploy` のエラーメッセージに
+従ってウィジェット定義を修正すること。
 
 ## 組織/権限管理（ロールベースアクセス）
 

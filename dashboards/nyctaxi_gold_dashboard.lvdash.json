@@ -1,0 +1,186 @@
+{
+  "datasets": [
+    {
+      "name": "trips_daily_gold_ds",
+      "displayName": "trips_daily_gold",
+      "query": "SELECT pickup_date, pickup_zip, trip_count, avg_fare, avg_distance, avg_trip_minutes FROM workspace.nyctaxi.trips_daily_gold ORDER BY pickup_date"
+    }
+  ],
+  "pages": [
+    {
+      "name": "nyctaxi_overview",
+      "displayName": "NYC Taxi Daily Overview",
+      "layout": [
+        {
+          "widget": {
+            "name": "total_trips_counter",
+            "queries": [
+              {
+                "name": "total_trips_query",
+                "query": {
+                  "datasetName": "trips_daily_gold_ds",
+                  "fields": [
+                    {
+                      "name": "sum(trip_count)",
+                      "expression": "SUM(`trip_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(trip_count)",
+                  "displayName": "合計トリップ数"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "総トリップ数"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 0, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "daily_trips_line",
+            "queries": [
+              {
+                "name": "daily_trips_query",
+                "query": {
+                  "datasetName": "trips_daily_gold_ds",
+                  "fields": [
+                    {
+                      "name": "pickup_date",
+                      "expression": "`pickup_date`"
+                    },
+                    {
+                      "name": "sum(trip_count)",
+                      "expression": "SUM(`trip_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "pickup_date",
+                  "scale": { "type": "temporal" },
+                  "displayName": "乗車日"
+                },
+                "y": {
+                  "fieldName": "sum(trip_count)",
+                  "scale": { "type": "quantitative" },
+                  "displayName": "トリップ数"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "日次トリップ数の推移"
+              }
+            }
+          },
+          "position": { "x": 2, "y": 0, "width": 4, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "avg_fare_by_zip_bar",
+            "queries": [
+              {
+                "name": "avg_fare_by_zip_query",
+                "query": {
+                  "datasetName": "trips_daily_gold_ds",
+                  "fields": [
+                    {
+                      "name": "pickup_zip",
+                      "expression": "`pickup_zip`"
+                    },
+                    {
+                      "name": "avg(avg_fare)",
+                      "expression": "AVG(`avg_fare`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "pickup_zip",
+                  "scale": { "type": "categorical" },
+                  "displayName": "乗車 ZIP"
+                },
+                "y": {
+                  "fieldName": "avg(avg_fare)",
+                  "scale": { "type": "quantitative" },
+                  "displayName": "平均運賃"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "乗車 ZIP ごとの平均運賃"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 3, "width": 6, "height": 4 }
+        },
+        {
+          "widget": {
+            "name": "daily_gold_table",
+            "queries": [
+              {
+                "name": "daily_gold_table_query",
+                "query": {
+                  "datasetName": "trips_daily_gold_ds",
+                  "fields": [
+                    { "name": "pickup_date", "expression": "`pickup_date`" },
+                    { "name": "pickup_zip", "expression": "`pickup_zip`" },
+                    { "name": "trip_count", "expression": "`trip_count`" },
+                    { "name": "avg_fare", "expression": "`avg_fare`" },
+                    { "name": "avg_distance", "expression": "`avg_distance`" },
+                    { "name": "avg_trip_minutes", "expression": "`avg_trip_minutes`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  { "fieldName": "pickup_date", "displayName": "乗車日" },
+                  { "fieldName": "pickup_zip", "displayName": "乗車ZIP" },
+                  { "fieldName": "trip_count", "displayName": "件数" },
+                  { "fieldName": "avg_fare", "displayName": "平均運賃" },
+                  { "fieldName": "avg_distance", "displayName": "平均距離" },
+                  { "fieldName": "avg_trip_minutes", "displayName": "平均乗車時間(分)" }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "日次集計明細"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 7, "width": 6, "height": 6 }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "pageType": "PAGE_TYPE_CANVAS"
+  }
+}
