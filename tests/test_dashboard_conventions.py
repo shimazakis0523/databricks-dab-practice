@@ -21,6 +21,12 @@
    正しくても "Invalid widget definition is imported" になることがあった。
    「`type` の値が許可リストに含まれるか」だけでなく「列オブジェクトが
    実エクスポート例と同じ必須フィールド一式を持っているか」も検証する。
+4. 上記はすべて「Lakeview のスキーマとして valid か」という観点のみで、
+   `avg_fare`（USD）や `avg_distance`（マイル）のタイトル/displayName に
+   単位が付いているかは別途チェックしていなかった。スキーマが valid でも
+   BI ダッシュボードの表示として単位が欠けていれば設計として不十分。
+   通貨・距離など単位を持つことが分かっているフィールドについて、
+   タイトル/displayName に単位表記があるかを検証する。
 
 このバンドルには `.lvdash.json` をライブのワークスペースに対して検証する
 手段が無い（`databricks bundle validate` は JSON の構文チェックのみで、
@@ -159,5 +165,65 @@ def test_table_widget_columns_have_all_required_fields():
         " フィールドが不足しています。type の値が正しくても、これらが無いと"
         " 実ワークスペースで 'Invalid widget definition is imported' に"
         " なることがあります:\n"
+        + "\n".join(violations)
+    )
+
+
+# データ上、単位を持つことが分かっているフィールドと、その単位が
+# タイトル/displayName に含まれているべき文字列（いずれかが含まれればよい）。
+# avg_fare（USD）に "$" を、avg_distance（マイル）に単位表記を付け忘れていた
+# ことがある（スキーマとしては valid でも、BI ダッシュボードの表示として
+# 単位が欠けているのは設計として不十分）。新しく単位を持つフィールドを
+# 追加したら、ここにも追記すること。
+FIELDS_REQUIRING_UNITS = {
+    "avg_fare": ["$"],
+    "avg_distance": ["マイル", "mile", "mi"],
+    "avg_trip_minutes": ["分", "min"],
+}
+
+
+def test_known_unit_fields_have_units_in_their_labels():
+    violations = []
+    for path in _load_dashboards():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for page in data.get("pages", []):
+            for item in page.get("layout", []):
+                widget = item.get("widget", {})
+                widget_name = widget.get("name", "<unnamed>")
+                spec = widget.get("spec", {})
+                encodings = spec.get("encodings", {})
+
+                # table 列
+                for column in encodings.get("columns", []):
+                    field_name = column.get("fieldName")
+                    unit_markers = FIELDS_REQUIRING_UNITS.get(field_name)
+                    if not unit_markers:
+                        continue
+                    label = f"{column.get('title', '')} {column.get('displayName', '')}"
+                    if not any(marker in label for marker in unit_markers):
+                        violations.append(
+                            f"{path.name}: widget={widget_name} column={field_name!r}"
+                            f" label={label!r} (expected one of {unit_markers})"
+                        )
+
+                # 軸エンコーディング（line/bar など）
+                for encoding in encodings.values():
+                    if not isinstance(encoding, dict):
+                        continue
+                    field_name = encoding.get("fieldName")
+                    unit_markers = FIELDS_REQUIRING_UNITS.get(field_name)
+                    if not unit_markers:
+                        continue
+                    label = encoding.get("displayName", "")
+                    if not any(marker in label for marker in unit_markers):
+                        violations.append(
+                            f"{path.name}: widget={widget_name} encoding={field_name!r}"
+                            f" label={label!r} (expected one of {unit_markers})"
+                        )
+
+    assert not violations, (
+        "単位を持つことが分かっているフィールドのラベルに単位表記がありません。"
+        " Lakeview のスキーマとして valid でも、BI ダッシュボードの表示として"
+        " 単位が欠けているのは設計として不十分です:\n"
         + "\n".join(violations)
     )
