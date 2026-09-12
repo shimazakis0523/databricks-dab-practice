@@ -23,6 +23,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 10 | グループ作成・entitlements 付与を手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.json`, `scripts/ensure_groups.py` |
 | 11 | IaC に無いグループの自動検知・削除、グループ経由でない直接権限の監査（ガバナンスのドリフト検知） | `scripts/audit_undeclared_groups.py`, `scripts/audit_user_entitlements.py` |
 | 12 | gold テーブルの BI ダッシュボードを DAB リソースとして宣言的に管理 | `resources/nyctaxi_dashboard.yml`, `dashboards/nyctaxi_gold_dashboard.lvdash.json` |
+| 13 | 環境（ワークスペース）依存の値をコードに直書きせず変数/環境変数へ外だしし、別環境への移植性を担保 | `databricks.yml`（`variables.warehouse_id`）, `tests/test_no_hardcoded_workspace_values.py` |
 
 ## 全体構成図
 
@@ -118,7 +119,8 @@ flowchart TB
 │   ├── test_transforms.py             # transforms.py のユニットテスト
 │   ├── test_resource_conventions.py   # resources/*.yml の命名規則チェック（再発防止）
 │   ├── test_readme_sync.py            # README.md のファイル記載漏れチェック（再発防止）
-│   └── test_groups_json_sync.py       # groups.json の entitlements 値の転記漏れチェック（再発防止）
+│   ├── test_groups_json_sync.py       # groups.json の entitlements 値の転記漏れチェック（再発防止）
+│   └── test_no_hardcoded_workspace_values.py  # databricks.yml へのワークスペース URL 直書きチェック（再発防止）
 ├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 └── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
@@ -521,22 +523,25 @@ databricks --version
 ### 3. 認証を設定する
 
 ```bash
-databricks auth login --host https://dbc-b1c4d17f-58d9.cloud.databricks.com
+databricks auth login --host <あなたのワークスペース URL>
 ```
 
 ブラウザが開くので OAuth でログインします。プロファイル名を聞かれたら任意の名前
 （例: `free-edition`）を入力します。設定は `~/.databrickscfg` に保存されます。
 
-### 4. ワークスペース URL を確認する
+### 4. ワークスペース URL を指定する
 
-`databricks.yml` の `targets.dev.workspace.host` には、このプロジェクトで使う
-Free Edition のワークスペース URL を設定済みです。別のワークスペースを使う場合のみ書き換えてください。
+`databricks.yml` にはワークスペース URL（`workspace.host`）をハードコードして
+**いません**。別のワークスペース（本番導入プロジェクトなど）にこの bundle を
+持ち込んだ際にホストが変わらず誤デプロイ・エラーになるのを避けるためです。
+実行前に以下のいずれかでホストを指定してください。
 
-```yaml
-targets:
-  dev:
-    workspace:
-      host: https://dbc-b1c4d17f-58d9.cloud.databricks.com
+```bash
+# 方法A: 環境変数（このリポジトリの CI もこの方式）
+export DATABRICKS_HOST=<あなたのワークスペース URL>
+
+# 方法B: 手順3で作成したプロファイルを明示する
+databricks bundle validate -t dev -p free-edition
 ```
 
 ### 5. バンドルを検証する
@@ -612,7 +617,7 @@ Databricks 側のサーバーレス枠をほとんど消費しません（実際
 
 | Secret 名 | 値 |
 | --- | --- |
-| `DATABRICKS_HOST` | `https://dbc-b1c4d17f-58d9.cloud.databricks.com` |
+| `DATABRICKS_HOST` | あなたのワークスペース URL |
 | `DATABRICKS_TOKEN` | 手順1で発行したトークン |
 
 ### 3. 動作確認

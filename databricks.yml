@@ -22,6 +22,10 @@ targets:
     # スケジュール/トリガー（nyctaxi_job の File arrival など）も
     # 一時停止されずデプロイ直後から有効になる。
     default: true
-    workspace:
-      # Databricks Free Edition ワークスペース
-      host: https://dbc-b1c4d17f-58d9.cloud.databricks.com
+    # workspace.host はワークスペースごとに異なる値であり、別のワークスペース
+    # （本番導入プロジェクトなど）にこの bundle を持ち込む際にハードコードして
+    # いるとエラー・誤デプロイの原因になるため、あえてここには書かない。
+    # 実行前に以下のいずれかでホストを指定すること:
+    #   - 環境変数 `DATABRICKS_HOST`（このリポジトリの CI はこの方式）
+    #   - `databricks configure` で作成したプロファイルを `--profile` で指定
+    # workspace: {}

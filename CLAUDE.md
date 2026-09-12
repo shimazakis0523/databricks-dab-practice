@@ -113,11 +113,23 @@ README を更新し忘れると CI が落ちる。
   グループ経由でカバーされるようにする、という二重の対策を踏襲する。
   監査レポートの文言は「グループでカバーされていない直接付与」だけを
   問題として示し、所属グループ自体が悪いように読める書き方をしない。
-- ワークスペースID（SQL Warehouse ID など）のような**ワークスペースごとに
-  異なる値**は、リソース定義に文字列直書きせず `databricks.yml` の
-  `variables` で管理する（`resources/nyctaxi_dashboard.yml` の
-  `warehouse_id: ${var.warehouse_id}` を参照）。`--var` フラグや
-  `BUNDLE_VAR_<name>` 環境変数で上書きでき、別のワークスペースへの移植性が
-  上がる。一方、`catalog` / `schema` のような、このバンドルの設計上どの
-  ワークスペースでも同じ値になる想定のものは文字列リテラルのままでよい
-  （変数化するかどうかは「環境によって変わる値か」で判断する）。
+- SQL Warehouse ID のような**ワークスペースごとに異なる値**は、リソース定義に
+  文字列直書きせず `databricks.yml` の `variables` で管理する
+  （`resources/nyctaxi_dashboard.yml` の `warehouse_id: ${var.warehouse_id}`
+  を参照）。`--var` フラグや `BUNDLE_VAR_<name>` 環境変数で上書きでき、
+  別のワークスペースへの移植性が上がる。一方、`catalog` / `schema` のような、
+  このバンドルの設計上どのワークスペースでも同じ値になる想定のものは
+  文字列リテラルのままでよい（変数化するかどうかは「環境によって変わる値か」
+  で判断する）。
+    - **このルールはワークスペース URL（`workspace.host`）にも同様に適用する。**
+      過去に `databricks.yml` の `targets.dev.workspace.host` へワークスペース URL
+      を直書きしたままにしていたことがあり、このバンドルを別のワークスペース
+      （本番導入プロジェクトなど）に持ち込む際にエラー・誤デプロイの原因になる
+      ところだった。根本原因は、このルールを「一般論」としてしか書いておらず、
+      どのフィールドが対象かを機械的にチェックしていなかったこと。`workspace.host`
+      は `variables` にせず、そもそも `databricks.yml` に書かない（`DATABRICKS_HOST`
+      環境変数または CLI プロファイルで指定する）方式にした。新しく
+      「環境で決まる固定値」をコード中に見つけたら、このルールに従い
+      `variables` 化するか設定ファイルから追い出すかを検討し、
+      `tests/test_no_hardcoded_workspace_values.py` のように機械的に
+      検知できるテストを追加すること。
