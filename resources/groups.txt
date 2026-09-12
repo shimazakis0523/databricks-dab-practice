@@ -1,0 +1,9 @@
+# このプロジェクトで使うワークスペースグループの一覧。
+# scripts/ensure_groups.sh がこのファイルを読み、存在しないグループだけを
+# ワークスペースの SCIM Groups API 経由で作成する（1行1グループ名、# はコメント）。
+#
+# グループ自体は DAB (Databricks Asset Bundles) では管理できないリソースのため、
+# ここに定義を集約し、コード（IaC）として可視化・自動作成する。
+nyctaxi-data-engineers
+nyctaxi-analysts
+nyctaxi-viewers

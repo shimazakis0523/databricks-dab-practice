@@ -20,6 +20,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
 | 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
 | 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）をコードで再現し権限を管理 | `resources/nyctaxi_permissions_job.yml`, `notebooks/grant_role_access.py` |
+| 10 | グループ作成そのものも手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.txt`, `scripts/ensure_groups.sh` |
 
 ## 全体構成図
 
@@ -89,7 +90,10 @@ flowchart TB
 │   ├── nyctaxi_pipeline.yml        # パイプライン定義（メダリオン構成）
 │   ├── nyctaxi_job.yml             # Job 定義（パイプラインを起動）
 │   ├── nyctaxi_seed_job.yml        # Job 定義（CSV をランディングゾーンへ投入）
-│   └── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
+│   ├── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
+│   └── groups.txt                  # 作成すべきワークスペースグループの一覧
+├── scripts/
+│   └── ensure_groups.sh            # groups.txt のグループを自動作成する（CI から実行）
 ├── notebooks/
 │   ├── seed_nyctaxi_csv.py         # CSV シード投入用 Notebook
 │   └── grant_role_access.py        # 3ロールへの GRANT を発行する Notebook
@@ -227,19 +231,36 @@ pytest tests/ -v
 
 ## 組織/権限管理（ロールベースアクセス）
 
-「組織のロール構成を DAB でどう再現するか」を検証するパートです。
-Databricks Free Edition はアカウントコンソール・SCIM・SSO が使えないため、
-グループはワークスペースの **Settings > Identity and access > Groups > Add group**
-から手動で作成する必要があります（DAB はグループそのものは作成できません。
-既存のグループに対する権限付与だけを管理します）。
+「組織のロール構成をコードで再現する」ことを検証するパートです。
+グループ自体もワークスペース UI で手動作成するのではなく、
+`resources/groups.txt` + `scripts/ensure_groups.sh` で自動作成しています。
 
-想定しているロールと、事前に作成しておく必要があるグループ:
+想定しているロールと、対応するグループ:
 
 | ロール | グループ名 | 権限 |
 | --- | --- | --- |
 | データエンジニア | `nyctaxi-data-engineers` | `nyctaxi` スキーマへの `ALL_PRIVILEGES`（Job/Pipeline のデプロイ・運用） |
 | アナリスト | `nyctaxi-analysts` | `nyctaxi` スキーマへの `USE_SCHEMA` + `SELECT`（bronze/silver/gold すべて参照可） |
 | 閲覧者 | `nyctaxi-viewers` | `trips_daily_gold` テーブルのみ `SELECT`（集計済みデータだけ） |
+
+### グループの自動作成（手動クリック不要）
+
+Databricks Free Edition はアカウントコンソール・SCIM 同期・SSO が使えないため、
+`databricks account groups create` のようなアカウントレベルの CLI は使えない。
+その代わり、**ワークスペース単位の SCIM Groups API**
+（`/api/2.0/preview/scim/v2/Groups`）を Databricks CLI の汎用コマンド
+`databricks api` 経由で呼び出し、`resources/groups.txt` に列挙したグループが
+存在しなければ作成する、というスクリプトを用意した。
+
+```bash
+DATABRICKS_HOST=... DATABRICKS_TOKEN=... ./scripts/ensure_groups.sh
+```
+
+- 何度実行しても安全（既に存在するグループはスキップする）
+- `.github/workflows/deploy.yml` の `deploy` ジョブで `bundle deploy` の直後に
+  自動実行される。つまり `main` へ push するだけで、コードに書いたグループが
+  ワークスペースに反映される
+- グループの一覧を変更したいときは `resources/groups.txt` を編集するだけでよい
 
 ### なぜ DAB の `grants` ではなく SQL GRANT で管理しているか
 
@@ -271,6 +292,7 @@ databricks bundle run nyctaxi_permissions_job -t dev
 - `trips_daily_gold` が作成された後（`nyctaxi_pipeline` を一度実行した後）に実行すること
 - 何度実行しても安全（べき等）
 - グループを作り直したときは再実行すること
+
 ## デプロイ方法は3通り
 
 - **A. ワークスペース UI（Bundle エディタ）からデプロイ** — ローカルに何もインストール不要。おすすめ
@@ -403,7 +425,8 @@ databricks bundle destroy -t dev
 
 - Pull Request 作成時・`main` への push 時: `pytest tests/`（ユニットテスト）と
   `databricks bundle validate -t dev`（バンドルの構文・参照チェック）を並行実行
-- `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev --auto-approve` を実行して自動デプロイ
+- `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev --auto-approve` を実行して自動デプロイし、
+  続けて `scripts/ensure_groups.sh` で `resources/groups.txt` のグループを自動作成
 
 `deploy` ジョブは `test` と `validate` の両方に依存しているため、
 ユニットテストが落ちていればデプロイは走りません。

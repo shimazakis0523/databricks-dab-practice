@@ -35,3 +35,8 @@ README を更新し忘れると CI が落ちる。
   デプロイが失敗する。既存データを保持したまま権限だけ管理したい場合は、
   `resources.schemas` の `grants` ではなく、明示的な SQL GRANT（べき等な
   Notebook + 手動実行 Job）で運用する。
+- 「グループやユーザーは DAB / アカウントコンソールで管理できないから、手動作成でよい」
+  で済ませない。Free Edition のようにアカウントコンソール・SCIM がない環境でも、
+  ワークスペース単位の SCIM Groups API（`/api/2.0/preview/scim/v2/Groups`）を
+  `databricks api` 経由で叩けば自動化できる。`resources/groups.txt` +
+  `scripts/ensure_groups.sh` のパターン（CI の deploy ジョブから自動実行）を踏襲する。

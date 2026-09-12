@@ -63,3 +63,13 @@ jobs:
         # 変更があっても確認プロンプトを出せず失敗する。--auto-approve でそれを自動承認し、
         # デプロイが止まらないようにする（この bundle はサンプル/学習用データのみを扱う前提）。
         run: databricks bundle deploy -t dev --auto-approve
+
+      - name: Ensure workspace groups
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        # resources/groups.txt に列挙したグループを、なければ作成する。
+        # Free Edition にはアカウントコンソール/SCIM 同期がないため、
+        # ワークスペースの SCIM Groups API を Databricks CLI 経由で叩いている
+        # （手動での Add group クリックを不要にするための自動化）。
+        run: ./scripts/ensure_groups.sh
