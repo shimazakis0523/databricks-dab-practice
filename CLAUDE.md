@@ -112,6 +112,23 @@ README を更新し忘れると CI が落ちる。
       タイトル/displayName に単位を明記する**（`tests/test_dashboard_conventions.py`
       の `test_known_unit_fields_have_units_in_their_labels` で機械的にチェックする）。
       新しい単位付きフィールドを追加したら、同テストの対象リストに追記すること。
+- **`resources/*.yml`（CI が毎回自動デプロイする対象）に、手動 Job でしか
+  作られない外部エンティティへの参照を持つリソース（`model_serving_endpoints`
+  が UC 登録モデルを entity_name で参照する、など）を置かない。**
+  `gold_qa_agent` 実装時に、モデル未登録の状態で `resources/gold_qa_agent_serving.yml`
+  を含めて push したところ、`databricks bundle deploy` が
+  "Registered model ... does not exist" で失敗し、**この1リソースの失敗が
+  bundle 全体のデプロイを止めてしまった**（ダッシュボードやグループなど
+  無関係なリソースのデプロイまで巻き込む事故になった）。根本原因は、
+  「手動 Job の実行結果」と「CI が毎回自動デプロイするリソース」の間に
+  デプロイ時点での強い依存関係（存在しないと `bundle deploy` 自体が失敗する）
+  を作ってしまったこと。この種のリソースは `templates/*.yml`
+  （`include: resources/*.yml` の対象外）に置き、手動 Job 実行後に
+  `resources/` へコピーする運用にする。`tests/test_no_blocking_model_serving_dependency.py`
+  が `resources/*.yml` にこの種のリソース種別が紛れ込んでいないかを
+  機械的にチェックする。新しく「手動 Job でしか作られないものを参照する
+  リソース」を追加する場合は、同テストの `BLOCKING_RESOURCE_TYPES` に
+  リソース種別を追記すること。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
   pytest テストする（`nyctaxi_pipeline.py` 自体は Databricks 実行環境でしか

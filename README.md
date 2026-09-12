@@ -24,7 +24,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 11 | IaC に無いグループの自動検知・削除、グループ経由でない直接権限の監査（ガバナンスのドリフト検知） | `scripts/audit_undeclared_groups.py`, `scripts/audit_user_entitlements.py` |
 | 12 | gold テーブルの BI ダッシュボードを DAB リソースとして宣言的に管理 | `resources/nyctaxi_dashboard.yml`, `dashboards/nyctaxi_gold_dashboard.lvdash.json` |
 | 13 | 環境（ワークスペース）依存の値をコードに直書きせず変数/環境変数へ外だしし、別環境への移植性を担保 | `databricks.yml`（`variables.warehouse_id`）, `tests/test_no_hardcoded_workspace_values.py` |
-| 14 | gold テーブルを参照する GenAI エージェントを MLflow ResponsesAgent として実装し、Model Serving で配信 | `agents/gold_qa_responses_agent.py`, `resources/gold_qa_agent_serving.yml` |
+| 14 | gold テーブルを参照する GenAI エージェントを MLflow ResponsesAgent として実装し、Model Serving で配信 | `agents/gold_qa_responses_agent.py`, `templates/gold_qa_agent_serving.yml` |
 
 ## 全体構成図
 
@@ -114,8 +114,9 @@ flowchart TB
 │   ├── nyctaxi_permissions_job.yml # Job 定義（3ロールへの権限付与）
 │   ├── groups.json                 # ワークスペースグループと entitlements の一覧
 │   ├── nyctaxi_dashboard.yml       # gold テーブルの BI ダッシュボード定義
-│   ├── gold_qa_agent_job.yml       # Job 定義（gold_qa_agent の登録、手動実行用）
-│   └── gold_qa_agent_serving.yml   # Model Serving エンドポイント定義（gold_qa_agent）
+│   └── gold_qa_agent_job.yml       # Job 定義（gold_qa_agent の登録、手動実行用）
+├── templates/
+│   └── gold_qa_agent_serving.yml   # Model Serving エンドポイント定義（gold_qa_agent、テンプレート）
 ├── dashboards/
 │   └── nyctaxi_gold_dashboard.lvdash.json  # Lakeview ダッシュボード本体（データセット/ページ/ウィジェット）
 ├── agents/
@@ -141,7 +142,8 @@ flowchart TB
 │   ├── test_groups_json_sync.py       # groups.json の entitlements 値の転記漏れチェック（再発防止）
 │   ├── test_no_hardcoded_workspace_values.py  # databricks.yml へのワークスペース URL 直書きチェック（再発防止）
 │   ├── test_dashboard_conventions.py  # lvdash.json の Lakeview 規約違反チェック（再発防止）
-│   └── test_gold_qa_agent.py          # gold_qa_agent.py のプロンプト構築ロジックのユニットテスト
+│   ├── test_gold_qa_agent.py          # gold_qa_agent.py のプロンプト構築ロジックのユニットテスト
+│   └── test_no_blocking_model_serving_dependency.py  # resources/*.yml が手動 Job 依存のリソースを含まないことのチェック（再発防止）
 ├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 └── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
@@ -153,6 +155,8 @@ flowchart TB
 - Dashboard: `nyctaxi_gold_dashboard` — `trips_daily_gold` を可視化する Lakeview（AI/BI）ダッシュボード
 - Job: `gold_qa_agent_registration_job` — `gold_qa_agent`（GenAI エージェント）を MLflow に登録する（手動実行用）
 - Model Serving エンドポイント: `gold_qa_agent` — 登録した `gold_qa_agent` を配信する
+  （`templates/gold_qa_agent_serving.yml` はテンプレートであり、モデル登録前は
+  `resources/` に置かない。理由は「GenAI エージェント」セクション参照）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -387,8 +391,29 @@ resources:
   Notebook（手動実行用）。
 - `resources/gold_qa_agent_job.yml` — 上記 Notebook を実行する Job
   （`gold_qa_agent_registration_job`）。
-- `resources/gold_qa_agent_serving.yml` — 登録したモデルを配信する
-  Model Serving エンドポイント（`gold_qa_agent`）。
+- `templates/gold_qa_agent_serving.yml` — 登録したモデルを配信する
+  Model Serving エンドポイント（`gold_qa_agent`）の**テンプレート**。
+  `resources/*.yml` には**置いていない**（下記「なぜ `resources/` では
+  なく `templates/` に置くか」を参照）。
+
+### なぜ `resources/` ではなく `templates/` に置くか
+
+`resources/*.yml` は `main` への push のたびに CI が自動デプロイする対象
+（`databricks.yml` の `include: resources/*.yml`）。この
+`model_serving_endpoints` リソースは Unity Catalog に登録済みのモデル
+（`workspace.nyctaxi.gold_qa_agent`）を参照するが、そのモデルは
+`gold_qa_agent_registration_job`（手動実行の Job）を一度実行しないと
+存在しない。`resources/*.yml` に含めたまま最初のモデル登録前に push すると、
+`databricks bundle deploy` が
+`Registered model 'workspace.nyctaxi.gold_qa_agent' does not exist` で
+失敗し、**この1リソースの失敗だけで bundle 全体のデプロイが止まり**、
+ダッシュボードやグループ同期など無関係なリソースの反映まで巻き込んで
+ブロックしてしまう（実際にこれで CI が壊れたことがある）。そのため
+このリソースだけは `templates/`（自動デプロイの対象外）に置き、モデル
+登録が完了してから手動で `resources/` にコピーする運用にしている。
+`tests/test_no_blocking_model_serving_dependency.py` が、この種の
+「手動 Job でしか作られないものに依存するリソース」が `resources/*.yml`
+に紛れ込んでいないかを機械的にチェックする。
 
 ### セットアップ手順
 
@@ -405,28 +430,36 @@ resources:
    別のスコープ名を使う場合は `databricks.yml` の
    `variables.agent_secret_scope` を上書きする。
 
-2. **`agent_databricks_host` 変数を設定する** — エンドポイントが
-   Foundation Model API を呼び出す際に使うワークスペース URL
-   （`databricks.yml` 自体には `workspace.host` を直書きしていないため、
-   別途この変数で渡す）:
-
-   ```bash
-   databricks bundle deploy -t dev --var="agent_databricks_host=<あなたのワークスペース URL>"
-   ```
-
-3. **`trips_daily_gold` を作成する** — `nyctaxi_pipeline` を一度実行し、
+2. **`trips_daily_gold` を作成する** — `nyctaxi_pipeline` を一度実行し、
    gold テーブルが存在する状態にしておく。
 
-4. **`gold_qa_agent_registration_job` を実行する** — `trips_daily_gold`
-   を要約してモデルを登録する:
+3. **`gold_qa_agent_registration_job` を実行する** — `trips_daily_gold`
+   を要約してモデルを登録する（このリソースは既に `resources/` にあるため、
+   通常の `bundle deploy` だけで反映されている）:
 
    ```bash
    databricks bundle run gold_qa_agent_registration_job -t dev
    ```
 
-   実行後に表示される **Version** の値を、`databricks.yml` の
-   `variables.gold_qa_agent_model_version` に設定し、再デプロイする
-   （`--var="gold_qa_agent_model_version=<バージョン>"` でも上書き可能）。
+   実行後に表示される **Version** の値を控える。
+
+4. **Model Serving エンドポイントを有効化する** — `templates/gold_qa_agent_serving.yml`
+   を `resources/gold_qa_agent_serving.yml` としてコピーし、
+   `databricks.yml` の `variables.gold_qa_agent_model_version` を
+   手順3の Version に更新してから、`agent_databricks_host` 変数と
+   合わせてデプロイする:
+
+   ```bash
+   cp templates/gold_qa_agent_serving.yml resources/gold_qa_agent_serving.yml
+   databricks bundle deploy -t dev \
+     --var="gold_qa_agent_model_version=<手順3の Version>" \
+     --var="agent_databricks_host=<あなたのワークスペース URL>"
+   ```
+
+   以後、モデルを再登録して新しいバージョンを配信したい場合は、
+   `variables.gold_qa_agent_model_version` を更新して再デプロイするだけでよい
+   （`resources/gold_qa_agent_serving.yml` は一度コピーすれば通常の
+   CI/CD で自動デプロイされ続ける）。
 
 5. **Model Serving エンドポイントを確認する** — ワークスペースの
    **Serving** 画面で `gold_qa_agent` エンドポイントが Ready になったら、

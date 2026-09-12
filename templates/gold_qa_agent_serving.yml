@@ -1,0 +1,45 @@
+# このファイルはテンプレートであり、`resources/*.yml` の自動デプロイ対象には
+# 含まれない（`databricks.yml` の `include: resources/*.yml` にこの
+# `templates/` ディレクトリはマッチしない）。
+#
+# なぜ resources/ に置いていないか:
+# この resources.model_serving_endpoints は Unity Catalog に登録済みの
+# モデル（workspace.nyctaxi.gold_qa_agent）を entity_name で参照するが、
+# そのモデルは `gold_qa_agent_registration_job`（手動実行の Job）を
+# 一度実行しないと存在しない。resources/*.yml に含めて CI から常時
+# 自動デプロイすると、モデル登録前は `databricks bundle deploy` が
+# 「Registered model ... does not exist」で失敗し、しかもこの1リソースの
+# 失敗が bundle 全体のデプロイを止めてしまう（他の無関係なリソースの
+# デプロイまで巻き込む）。実際にこれで CI の deploy が壊れたことがある。
+#
+# 手順:
+# 1. README「GenAI エージェント（gold_qa_agent）」の手順に従い、
+#    `gold_qa_agent_registration_job` を実行してモデルを登録する
+# 2. このファイルを `resources/gold_qa_agent_serving.yml` としてコピーする
+# 3. `databricks.yml` の `variables.gold_qa_agent_model_version` を、
+#    登録時に表示された Version の値に更新する
+# 4. `databricks bundle deploy` する
+#
+# 以後は `resources/gold_qa_agent_serving.yml` として通常どおり
+# CI から自動デプロイされる（モデルは既に存在するため）。
+
+resources:
+  model_serving_endpoints:
+    gold_qa_agent_endpoint:
+      name: gold_qa_agent
+      config:
+        served_entities:
+          - entity_name: workspace.nyctaxi.gold_qa_agent
+            # gold_qa_agent_registration_job を実行するたびに新しい
+            # バージョンが登録される。実行後に表示される Version の値へ
+            # databricks.yml の variables.gold_qa_agent_model_version を
+            # 更新して再デプロイすること。
+            entity_version: "${var.gold_qa_agent_model_version}"
+            workload_size: Small
+            scale_to_zero_enabled: true
+            environment_vars:
+              # いずれもワークスペースごとに異なる値、またはシークレットの
+              # ため、コードに直書きせず変数/シークレット参照で渡す。
+              DATABRICKS_HOST: "${var.agent_databricks_host}"
+              DATABRICKS_TOKEN: "{{secrets/${var.agent_secret_scope}/databricks_token}}"
+              GOLD_QA_FOUNDATION_MODEL_ENDPOINT: "${var.gold_qa_foundation_model_endpoint}"
