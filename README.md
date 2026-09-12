@@ -47,9 +47,10 @@ CSV として書き出したものです。
 - ランディングゾーンは `resources/nyctaxi_landing.yml` で定義する Volume
   `/Volumes/workspace/nyctaxi/landing`。`catalog_name` / `schema_name` は
   パイプラインと同じく文字列で直接指定しています
-  （`mode: development` はバンドル管理の `schemas` リソースの物理名を
-  `dev_<user>_nyctaxi` のようにリネームしてしまうため、あえて schemas
-  リソースにはせず、パイプラインが作成する `nyctaxi` スキーマをそのまま参照しています）
+  （`mode: development` を使うと、バンドル管理の `schemas` リソースの物理名が
+  `dev_<user>_nyctaxi` のようにリネームされてしまうため、あえて schemas
+  リソースにはせず、パイプラインが作成する `nyctaxi` スキーマをそのまま参照しています。
+  詳しくは「開発時の注意点」を参照）
 - 品質ルールは `@dlt.expect_all_or_drop` で定義。違反行は取り込まれず、パイプライン画面でドロップ件数を確認できます
 - CSV は Auto Loader の既定動作どおり、いったんすべて文字列として Bronze に入り、
   Silver に渡す前に `cast_raw_trip_columns`（`pipelines/transforms.py`）で型変換します
@@ -93,19 +94,16 @@ trigger:
 - `min_time_between_triggers_seconds`: 短時間に何度もファイルが来ても、この間隔以上空けてから起動する
 - `wait_after_last_change_seconds`: 最後のファイル変更からこの秒数だけ待ってから起動する（書き込み完了を待つため）
 
-> **注意**: `mode: development` はスケジュール/トリガーを常に一時停止（PAUSED）状態で
-> デプロイする（`presets.trigger_pause_status: UNPAUSED` で解除しようとしても
+> **補足**: `mode: development` を使うと、スケジュール/トリガーは常に一時停止（PAUSED）
+> 状態でデプロイされ、`presets.trigger_pause_status: UNPAUSED` で解除しようとしても
 > `target with 'mode: development' cannot set trigger pause status to UNPAUSED by default`
-> というエラーで拒否される、意図した安全装置）。加えて DAB が管理する Job は
+> というエラーで拒否される（意図した安全装置）。また DAB が管理する Job は
 > ワークスペース UI からも直接 Resume できない
 > （「Connected to Declarative Automation Bundles」と表示され、`Edit trigger` /
 > `Resume` / `Delete` が非活性になる）。
 >
-> そのため `dev` ターゲット（`mode: development`）では File arrival トリガーは
-> 常に一時停止のままで、自動起動は確認できない。実際に自動起動させたい場合は、
-> `mode: development` を使わない別ターゲット（例: 本番相当の `prod` ターゲット）を
-> 用意してそちらにデプロイする必要がある。学習用のこのバンドルでは
-> `nyctaxi_pipeline` / `nyctaxi_job` を手動 Run する運用にとどめている。
+> このバンドルは本番相当の運用として `mode: development` を使っていない
+> （「開発時の注意点」参照）ため、デプロイ直後から File arrival トリガーが有効な状態になる。
 
 実行後、カタログエクスプローラの `workspace > nyctaxi` に3つのテーブルが作成されます。
 SQL エディタから確認できます。
@@ -179,7 +177,7 @@ Bundle エディタが開きます。左側にバンドルのリソース（`nyc
 
 1. エディタ右上のターゲット選択で **dev** を選びます。
 2. **Deploy** をクリックします。
-3. デプロイログが表示され、完了すると `[dev <ユーザー名>] nyctaxi_pipeline` などが作成されます。
+3. デプロイログが表示され、完了すると `nyctaxi_pipeline` などが作成されます。
 
 ### 4. Job / Pipeline を実行する
 
@@ -253,7 +251,7 @@ databricks bundle deploy -t dev
 
 成功すると、ワークスペースの
 `/Workspace/Users/<your-email>/.bundle/databricks-dab-practice/dev/` 配下にファイルが配置され、
-`[dev <your-name>] nyctaxi_pipeline` などの Job / Pipeline が作成されます。
+`nyctaxi_pipeline` などの Job / Pipeline が作成されます。
 
 ### 7. Job / Pipeline を実行する
 
@@ -324,13 +322,19 @@ Pull Request 上では `validate` のみが走り、デプロイは行われま�
 
 ## 補足
 
-- `mode: development` のため、デプロイされるリソース名には `[dev <ユーザー名>]` の接頭辞が付き、
-  スケジュールは一時停止された状態になります。学習用途で他のユーザーと衝突しないための仕組みです。
+- このバンドルは `mode: development` を使っていません（本番相当の運用として、
+  `dev` ターゲットにそのままデプロイする構成）。そのためリソース名に
+  `[dev <ユーザー名>]` のような接頭辞は付かず、スケジュール/トリガーも
+  デプロイ直後から有効になります。
 - Free Edition ではサーバーレスコンピュートが自動的に使用されます。
 
 ## 開発時の注意点（過去に踏んだ落とし穴）
 
 ### UC のカタログ / スキーマ参照は必ず文字列リテラルで統一する
+
+（このバンドルは現在 `mode: development` を使っていないが、これは
+`mode: development` を使っていた時期に実際に踏んだ落とし穴であり、
+将来また使う場合の注意点として残す）
 
 `mode: development` は、Job・Pipeline の**表示名**には `[dev <ユーザー名>]` を
 先頭に付けるだけだが、`resources.schemas` / `resources.catalogs` として

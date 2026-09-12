@@ -7,7 +7,10 @@ include:
 
 targets:
   dev:
-    mode: development
+    # mode: development を指定しない = 本番相当のデプロイ。
+    # リソース名に [dev <ユーザー名>] のような接頭辞が付かず、
+    # スケジュール/トリガー（nyctaxi_job の File arrival など）も
+    # 一時停止されずデプロイ直後から有効になる。
     default: true
     workspace:
       # Databricks Free Edition ワークスペース
