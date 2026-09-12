@@ -18,7 +18,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 5 | GitHub Actions による CI/CD（テスト → validate → deploy の自動化） | `.github/workflows/deploy.yml` |
 | 6 | Databricks 実行環境に依存しない変換ロジックの単体テスト | `pipelines/transforms.py`, `tests/test_transforms.py` |
 | 7 | 過去に踏んだ設定ミスを機械的に検知するテスト（再発防止のハーネス） | `tests/test_resource_conventions.py` |
-| 8 | 構成変更・機能拡張時のドキュメント更新漏れを検知するハーネス + フィードフォワード | `CLAUDE.md`, `tests/test_readme_sync.py` |
+| 8 | 構成変更・機能拡張時のドキュメント更新漏れ（ファイル存在レベル・内容レベルの両方）を検知するハーネス + フィードフォワード、指摘を受けたら根本原因分析まで行うメタルール | `CLAUDE.md`, `tests/test_readme_sync.py`, `tests/test_groups_json_sync.py` |
 | 9 | 組織のロール構成（データエンジニア/アナリスト/閲覧者）をコードで再現し権限を管理 | `resources/nyctaxi_permissions_job.yml`, `notebooks/grant_role_access.py` |
 | 10 | グループ作成・entitlements 付与を手動 UI 操作ではなく CI から自動化（SCIM Groups API） | `resources/groups.json`, `scripts/ensure_groups.py` |
 | 11 | IaC に無いグループの自動検知・削除、グループ経由でない直接権限の監査（ガバナンスのドリフト検知） | `scripts/audit_undeclared_groups.py`, `scripts/audit_user_entitlements.py` |
@@ -108,7 +108,8 @@ flowchart TB
 │   ├── conftest.py                    # ローカル SparkSession フィクスチャ
 │   ├── test_transforms.py             # transforms.py のユニットテスト
 │   ├── test_resource_conventions.py   # resources/*.yml の命名規則チェック（再発防止）
-│   └── test_readme_sync.py            # README.md の更新漏れチェック（再発防止）
+│   ├── test_readme_sync.py            # README.md のファイル記載漏れチェック（再発防止）
+│   └── test_groups_json_sync.py       # groups.json の entitlements 値の転記漏れチェック（再発防止）
 ├── requirements-test.txt           # テスト用依存関係（pyspark, pytest, PyYAML）
 └── CLAUDE.md                       # 変更時に README も更新するというルールなどの開発ガイド
 ```
