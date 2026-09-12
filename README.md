@@ -93,11 +93,14 @@ trigger:
 - `min_time_between_triggers_seconds`: 短時間に何度もファイルが来ても、この間隔以上空けてから起動する
 - `wait_after_last_change_seconds`: 最後のファイル変更からこの秒数だけ待ってから起動する（書き込み完了を待つため）
 
-> **注意**: `mode: development` のターゲットではトリガーが自動的に一時停止（PAUSED）状態で
-> デプロイされます。有効にするには、ワークスペースで `nyctaxi_job` を開き、手動で
-> トリガーを Resume してください。有効化すると、ファイルが届くたびにサーバーレスが
-> 起動して実行されるため、`nyctaxi_seed_job` を連続実行するとサーバーレス枠を
-> 早く消費する点に注意してください。
+> **注意**: `mode: development` は既定でスケジュール/トリガーを一時停止（PAUSED）状態で
+> デプロイする。DAB が管理する Job はワークスペース UI から直接 Resume できない
+> （「Connected to Declarative Automation Bundles」と表示され、`Edit trigger` /
+> `Resume` / `Delete` が非活性になる）ため、`databricks.yml` の `dev` ターゲットに
+> `presets.trigger_pause_status: UNPAUSED` を設定してデプロイ時から有効化した状態にしている。
+>
+> 有効化すると、ファイルが届くたびにサーバーレスが起動して実行されるため、
+> `nyctaxi_seed_job` を連続実行するとサーバーレス枠を早く消費する点に注意すること。
 
 実行後、カタログエクスプローラの `workspace > nyctaxi` に3つのテーブルが作成されます。
 SQL エディタから確認できます。
