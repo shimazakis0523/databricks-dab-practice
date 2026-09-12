@@ -59,10 +59,11 @@ SQL エディタから確認できます。
 SELECT * FROM workspace.nyctaxi.trips_daily_gold ORDER BY trip_count DESC LIMIT 20;
 ```
 
-## デプロイ方法は2通り
+## デプロイ方法は3通り
 
 - **A. ワークスペース UI（Bundle エディタ）からデプロイ** — ローカルに何もインストール不要。おすすめ
 - **B. ローカル PC の Databricks CLI からデプロイ** — CI/CD や本番運用向け
+- **C. GitHub Actions からデプロイ（CI/CD）** — `main` に push すると自動で validate / deploy
 
 ---
 
@@ -183,6 +184,45 @@ databricks bundle destroy -t dev
 ```
 
 デプロイした Job とファイルが削除されます。
+
+## C. GitHub Actions から自動デプロイする（CI/CD）
+
+`.github/workflows/deploy.yml` に、以下を行う GitHub Actions ワークフローを用意しています。
+
+- Pull Request 作成時: `databricks bundle validate -t dev` を実行してバンドルの構文・参照エラーを検知
+- `main` への push 時: validate 後に `databricks bundle deploy -t dev` を実行して自動デプロイ
+
+コンピュートは Actions の実行環境（GitHub 側）でのみ動くので、CI/CD 自体は
+Databricks 側のサーバーレス枠をほとんど消費しません（実際にジョブやパイプラインを
+実行するタイミングでのみワークスペース側のサーバーレスが使われます）。
+
+### 1. サービスプリンシパル用のトークンを用意する
+
+学習用途であればユーザー個人のパーソナルアクセストークンでも構いません。
+
+1. Databricks の右上ユーザーメニュー → **Settings > Developer > Access tokens** を開く
+2. **Generate new token** でトークンを発行し、値を控えます（一度しか表示されません）
+
+### 2. GitHub リポジトリに Secrets を登録する
+
+リポジトリの **Settings > Secrets and variables > Actions** で以下を登録します。
+
+| Secret 名 | 値 |
+| --- | --- |
+| `DATABRICKS_HOST` | `https://dbc-b1c4d17f-58d9.cloud.databricks.com` |
+| `DATABRICKS_TOKEN` | 手順1で発行したトークン |
+
+### 3. 動作確認
+
+`main` ブランチに何かしら変更を push すると、GitHub の **Actions** タブにワークフローが表示されます。
+
+- `validate` ジョブが成功すればバンドル定義に問題なし
+- `deploy` ジョブまで成功すれば、ワークスペースの `dev` ターゲットへ自動反映されます
+
+Pull Request 上では `validate` のみが走り、デプロイは行われません。マージして `main` に
+取り込まれたタイミングで初めて `deploy` が実行される、という一般的な CI/CD の流れです。
+
+---
 
 ## 補足
 
