@@ -503,6 +503,15 @@ GitHub 上の実例で確認したうえで修正する）で対応する。
 前に Notebook 自身の認証情報から同じ環境変数を設定するよう修正済み
 （`tests/test_register_notebook_sets_agent_env_vars.py` で再発防止）。
 
+この修正の直後、今度は `agents/gold_qa_responses_agent.py` の `predict()` が
+`TypeError: 'Message' object is not subscriptable` で失敗した。GitHub 上の
+参考実装が `request.input` の要素に `item["content"]`（dict アクセス）を
+使っていたのをそのまま踏襲していたが、このプロジェクトで pin している
+`mlflow>=3.1.0` では要素は dict ではなく属性アクセスの `Message` オブジェクト
+だった。`.content` への属性アクセスに修正済み。参考実装がどの mlflow
+バージョン向けかは分からないため、最終的にはワークスペースで実際に
+実行して確認する必要がある、という教訓（CLAUDE.md 参照）。
+
 ## 組織/権限管理（ロールベースアクセス）
 
 「組織のロール構成をコードで再現する」ことを検証するパートです。

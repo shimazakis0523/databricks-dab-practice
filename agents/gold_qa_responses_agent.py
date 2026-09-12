@@ -48,7 +48,12 @@ class GoldQAResponsesAgent(ResponsesAgent):
         )
 
     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
-        question = request.input[-1]["content"]
+        # request.input の各要素は dict ではなく Message オブジェクト
+        # （属性アクセス）。実際にワークスペースで実行して
+        # `TypeError: 'Message' object is not subscriptable` になったため判明した
+        # （辞書アクセスできる例を紹介する記事もあるが、mlflow>=3.1.0 の
+        # ResponsesAgentRequest ではこの形になる）。
+        question = request.input[-1].content
         messages = build_messages(question, self.gold_context)
 
         response = self.client.chat.completions.create(model=self.model, messages=messages)
