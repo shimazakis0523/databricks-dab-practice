@@ -59,4 +59,7 @@ jobs:
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: databricks bundle deploy -t dev
+        # CI は非対話環境のため、スキーマ/Volume の削除・再作成などを伴う破壊的な
+        # 変更があっても確認プロンプトを出せず失敗する。--auto-approve でそれを自動承認し、
+        # デプロイが止まらないようにする（この bundle はサンプル/学習用データのみを扱う前提）。
+        run: databricks bundle deploy -t dev --auto-approve

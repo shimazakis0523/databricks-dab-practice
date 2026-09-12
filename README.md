@@ -250,10 +250,17 @@ databricks bundle destroy -t dev
 
 - Pull Request 作成時・`main` への push 時: `pytest tests/`（ユニットテスト）と
   `databricks bundle validate -t dev`（バンドルの構文・参照チェック）を並行実行
-- `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev` を実行して自動デプロイ
+- `main` への push 時のみ: 上記2つが通った後に `databricks bundle deploy -t dev --auto-approve` を実行して自動デプロイ
 
 `deploy` ジョブは `test` と `validate` の両方に依存しているため、
 ユニットテストが落ちていればデプロイは走りません。
+
+> **`--auto-approve` について**: スキーマ / Volume の削除・再作成など破壊的な変更を
+> 伴うデプロイは、対話的な承認プロンプトが出せない CI では既定だと失敗します。
+> このバンドルはサンプル・学習用データのみを扱う前提で `--auto-approve` を付けており、
+> 破壊的な変更（スキーマの削除・Volume の再作成など）も確認なしに自動実行されます。
+> 本番相当のデータを扱うバンドルでは、この付け方を避けるか、
+> デプロイ前に手動で `databricks bundle deploy` を実行してプランを確認する運用にしてください。
 
 コンピュートは Actions の実行環境（GitHub 側）でのみ動くので、CI/CD 自体は
 Databricks 側のサーバーレス枠をほとんど消費しません（実際にジョブやパイプラインを
