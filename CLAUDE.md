@@ -306,3 +306,31 @@ README を更新し忘れると CI が落ちる。
       狙い撃ちする実装に直した。ハーネスを書く際は「文字列パターンが
       ファイルのどこに出現してもアウト」という広すぎるチェックにせず、
       「本当に禁止したい構造上の位置」だけを対象にすること。
+- **`resources.apps`（Databricks App）は `databricks bundle deploy` だけでは
+  実際にアプリが起動しない。** `gold_qa_streamlit_app` を実装した際、
+  `resources.jobs` / `resources.pipelines` / `resources.dashboards` /
+  `resources.model_serving_endpoints` はいずれも `bundle deploy` 一発で
+  CI から完全自動デプロイできる前提でこのプロジェクトを組んできたため、
+  App も同様だと思い込み、CI（`deploy.yml`）に `bundle deploy` しか
+  書いていなかった。実際には `bundle deploy` はアプリのリソース定義の
+  作成とソースコードのワークスペースへの同期までしか行わず、ソース
+  コードの実際のデプロイ・起動には `databricks bundle run <resource key>`
+  （または UI の「Create deployment」操作）が別途必要という、他の
+  リソース種別とは異なる特性を持つ。これを見落とした結果、CI は
+  成功と表示されたのにアプリは実際には使えず、ユーザーがワークスペース
+  UI から手動で「Create deployment」→ Source code path 入力という操作を
+  行う必要が生じた。根本原因は、既存の他リソースで成立していた
+  「`bundle deploy` = デプロイ完了」という前提を、新しいリソース種別に
+  検証せず適用してしまったこと。対策として `deploy.yml` の
+  `Deploy bundle` ステップの直後に `databricks bundle run
+  gold_qa_streamlit_app -t dev` を追加し、CI だけで実際に起動まで
+  完了するようにした。**今後 `resources.apps` を新規追加する場合も、
+  `bundle deploy` の成功だけで「使える状態になった」と判断せず、
+  `bundle run` が CI に含まれているか、実際にアプリへアクセスして
+  動作確認すること。**（この種の「リソース種別ごとに `bundle deploy`
+  だけで完結するかどうかが違う」という非対称性は、GitHub Actions の
+  ログだけでは気づけず、実際にワークスペース UI でユーザーが操作した
+  結果としてしか発覚しなかった。同様の新しいリソース種別を追加する際は、
+  `bundle deploy` の出力メッセージ（例:「Created apps.xxx」）が
+  「リソースの存在」を示しているだけなのか「実際に使える状態」まで
+  示しているのかを、ドキュメントで確認するか一度手動検証すること。）

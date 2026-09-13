@@ -64,6 +64,19 @@ jobs:
         # デプロイが止まらないようにする（この bundle はサンプル/学習用データのみを扱う前提）。
         run: databricks bundle deploy -t dev --auto-approve
 
+      - name: Deploy and start the Streamlit app
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        # resources.apps は databricks bundle deploy だけではリソース定義の
+        # 作成・コード同期までしか行われず、実際のアプリの起動（ソースコードの
+        # デプロイ）には databricks bundle run <resource key> が別途必要
+        # （resources.jobs/pipelines/dashboards/model_serving_endpoints とは
+        # 異なる特性）。これを漏らしたため、初回は手動でワークスペース UI から
+        # 「Create deployment」を実行する必要があった。今後の push でも
+        # 自動的に最新コードがデプロイ・起動されるよう、ここで明示的に実行する。
+        run: databricks bundle run gold_qa_streamlit_app -t dev
+
       - name: Ensure workspace groups and entitlements
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}

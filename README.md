@@ -569,10 +569,20 @@ Databricks App 上の簡易 Streamlit 画面です。
 
 GenAI エージェント自体（`gold_qa_agent_serving.yml`）と異なり、この App では
 シークレットスコープの作成など追加の手動セットアップは不要です。認証は
-Databricks Apps のランタイムが自動的に処理し（App のサービスプリンシパルに
+Databricks Apps のランタイムが自動的に処理します（App のサービスプリンシパルに
 対して上記 `serving_endpoint` の権限を付与しているだけで、コード側で
-トークンを扱う必要はない）、`databricks bundle deploy` 実行時に自動で
-デプロイされます。
+トークンを扱う必要はない）。
+
+`resources.apps` は `databricks bundle deploy` だけではリソース定義の作成と
+ソースコードの同期までしか行われず、実際にアプリを起動するには
+`databricks bundle run gold_qa_streamlit_app -t dev`（App のソースコードを
+デプロイして起動するコマンド）が別途必要です。`resources.jobs` /
+`resources.pipelines` / `resources.dashboards` / `resources.model_serving_endpoints`
+とは異なるこの特性を初回実装時に見落とし、一度ワークスペース UI から
+手動で「Create deployment」操作が必要になりました（詳細は
+「開発時の注意点」参照）。以後は `.github/workflows/deploy.yml` の
+`Deploy bundle` ステップの直後にこの `bundle run` を追加してあるため、
+push するたびに CI だけで起動まで自動的に完了します。
 
 デプロイ後は、ワークスペースの左サイドバー「Apps」から `gold-qa-streamlit`
 を開くと利用できます（起動まで数分かかることがあります）。
@@ -944,3 +954,25 @@ Pull Request 上では `validate` のみが走り、デプロイは行われま�
 チェックしており、`resources/*.yml` のどこかで
 `${resources.schemas...}` / `${resources.catalogs...}` を
 catalog/schema 系フィールドの値に使うと CI の `test` ジョブが失敗する。
+
+### `resources.apps` は `bundle deploy` だけではアプリが起動しない
+
+`resources.jobs` / `resources.pipelines` / `resources.dashboards` /
+`resources.model_serving_endpoints` はいずれも `databricks bundle deploy`
+一発で CI から完全自動デプロイできるため、`resources.apps`
+（`gold_qa_streamlit_app`）も同様だろうと決め打ちして `deploy.yml` に
+`bundle deploy` しか書いていなかった。実際には `bundle deploy` は
+アプリのリソース定義の作成とソースコードのワークスペースへの同期までしか
+行わず（ログにも `Created apps.gold_qa_streamlit_app` としか出ない）、
+ソースコードを実際にデプロイして起動するには `databricks bundle run
+<resource key>` が別途必要だった。これに気づかず push した結果、CI は
+成功と表示されたのにアプリは実際には使えず、ワークスペース UI から
+手動で「Create deployment」→ Source code path 入力という操作を行う
+羽目になった。
+
+対策として `deploy.yml` の `Deploy bundle` ステップの直後に
+`databricks bundle run gold_qa_streamlit_app -t dev` を追加し、push の
+たびに CI だけで起動まで完了するようにした。**今後 `resources.apps` を
+新規追加する場合も、`bundle deploy` の成功だけで「使える状態になった」と
+判断せず、`bundle run` が CI に含まれているか、実際にアプリへアクセスして
+動作確認すること。**
