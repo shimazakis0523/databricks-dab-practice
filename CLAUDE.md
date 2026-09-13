@@ -124,11 +124,27 @@ README を更新し忘れると CI が落ちる。
   デプロイ時点での強い依存関係（存在しないと `bundle deploy` 自体が失敗する）
   を作ってしまったこと。この種のリソースは `templates/*.yml`
   （`include: resources/*.yml` の対象外）に置き、手動 Job 実行後に
-  `resources/` へコピーする運用にする。`tests/test_no_blocking_model_serving_dependency.py`
-  が `resources/*.yml` にこの種のリソース種別が紛れ込んでいないかを
-  機械的にチェックする。新しく「手動 Job でしか作られないものを参照する
-  リソース」を追加する場合は、同テストの `BLOCKING_RESOURCE_TYPES` に
-  リソース種別を追記すること。
+  `resources/` へコピーする運用にする。
+
+  当初 `tests/test_no_blocking_model_serving_dependency.py` で
+  `resources/*.yml` に `model_serving_endpoints` 種別のリソースが
+  存在しないことを機械的にチェックしていたが、これは
+  **「まだモデルが存在しない一時的な状態」と「ブートストラップ完了後の
+  正常な状態」を区別できない、永久にブロックし続けるだけの禁止だった**。
+  実際に `gold_qa_agent` のモデル登録が完了し、`templates/gold_qa_agent_serving.yml`
+  を `resources/` へコピーする段になって、このテスト自体が正しい手順を
+  ブロックすることが分かり、同テストは削除した（Unity Catalog 上の
+  モデルが実在するかどうかは、CI の pytest ステップ（Databricks への
+  接続を持たない）からは検証できないため、静的テストでこの状態遷移を
+  正しく追跡することはできない）。
+  **今後、同じ形（手動 Job でしか作られない外部エンティティに依存する
+  リソース）を新しく追加する場合は、`templates/*.yml` に置いてから
+  ブートストラップし、完了後に `resources/` へコピーするという運用手順を
+  README に従って踏襲すること。** これは自動テストではなく、
+  レビュー・手順書ベースで守るべきプロセスであると位置づける
+  （「文字列パターンや存在チェックだけでは表現できない、時間的な状態遷移を
+  伴うルールを無理にハーネス化しようとすると、かえって正しい状態を
+  ブロックする」という教訓）。
 - **`mlflow.pyfunc.log_model()` はモデル登録直後に「入力例に対する予測」を
   自動実行して検証する（＝登録時の Notebook 環境で一度 `predict()` が
   呼ばれる）。** `agents/gold_qa_responses_agent.py` の `load_context` は
@@ -247,3 +263,15 @@ README を更新し忘れると CI が落ちる。
       `variables` 化するか設定ファイルから追い出すかを検討し、
       `tests/test_no_hardcoded_workspace_values.py` のように機械的に
       検知できるテストを追加すること。
+    - **ハーネスがファイル全体を正規表現で走査すると、意図的な設計を
+      誤検知することがある。** `gold_qa_agent` 実装時、`agent_databricks_host`
+      変数の `default` に（`warehouse_id` と同じ設計で）このワークスペースの
+      具体的な URL を設定したところ、`test_no_hardcoded_workspace_values.py`
+      が `databricks.yml` 全体を正規表現で走査する実装だったために誤検知した。
+      `variables.*.default` に具体的な値を持たせつつ `--var` で上書き可能に
+      するのは、このプロジェクトが意図的に採用している移植性の確保方法
+      そのものであり、`targets.*.workspace.host` への直書きとは別物。
+      該当テストは YAML をパースして `targets.*.workspace.host` だけを
+      狙い撃ちする実装に直した。ハーネスを書く際は「文字列パターンが
+      ファイルのどこに出現してもアウト」という広すぎるチェックにせず、
+      「本当に禁止したい構造上の位置」だけを対象にすること。

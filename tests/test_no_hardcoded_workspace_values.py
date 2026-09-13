@@ -11,29 +11,40 @@
 適用し忘れていた（ルールが「一般論」として書かれていて、具体的にどの
 フィールドが対象かを機械的にチェックしていなかったのが根本原因）。
 
-このテストは `databricks.yml` に `*.cloud.databricks.com` 形式の
-ワークスペース URL が直書きされていないかを検査する。
+このテストは `targets.*.workspace.host` にワークスペース URL が
+直書きされていないかを検査する。
+
+**注意**: `variables.*.default` にワークスペース URL 相当の文字列が入る
+ことは問題ではない（`warehouse_id` や `agent_databricks_host` のように、
+「このワークスペース向けの具体的なデフォルト値を持ちつつ `--var` で
+上書きできる」という設計は、このプロジェクトが意図的に採用している
+移植性の確保方法そのものである）。そのため、当初はファイル全体を
+正規表現で走査していたが、`agent_databricks_host` の default 値
+（意図的な設計）を誤検知したことがある。`targets.*.workspace.host` だけを
+YAML としてパースして狙い撃ちする実装に直した。
 """
 
-import re
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DATABRICKS_YML = ROOT / "databricks.yml"
 
-# https://<workspace-id>.cloud.databricks.com 形式のワークスペース URL パターン。
-WORKSPACE_URL_PATTERN = re.compile(r"https://[a-zA-Z0-9-]+\.cloud\.databricks\.com")
 
+def test_targets_workspace_host_is_not_hardcoded():
+    data = yaml.safe_load(DATABRICKS_YML.read_text(encoding="utf-8")) or {}
 
-def test_databricks_yml_has_no_hardcoded_workspace_host():
-    text = DATABRICKS_YML.read_text(encoding="utf-8")
-    matches = WORKSPACE_URL_PATTERN.findall(text)
+    violations = []
+    for target_name, target in (data.get("targets") or {}).items():
+        host = ((target or {}).get("workspace") or {}).get("host")
+        if host:
+            violations.append(f"targets.{target_name}.workspace.host = {host!r}")
 
-    assert not matches, (
-        "databricks.yml にワークスペース URL が直書きされています。"
-        " ワークスペースごとに異なる値のため、`workspace.host` を直書きせず、"
+    assert not violations, (
+        "databricks.yml の targets.*.workspace.host にワークスペース URL が"
+        " 直書きされています。ワークスペースごとに異なる値のため、"
         " `DATABRICKS_HOST` 環境変数か CLI プロファイル（`--profile`）で"
         " 指定する運用にしてください（README「B. ローカル PC の Databricks CLI"
-        " からデプロイする」参照）:\n"
-        + "\n".join(matches)
+        " からデプロイする」参照）:\n" + "\n".join(violations)
     )

@@ -31,7 +31,8 @@ variables:
       呼び出す際に使うワークスペース URL。databricks.yml 自体には
       workspace.host を直書きしていないため、ここで別途指定する
       （例: --var="agent_databricks_host=<あなたのワークスペース URL>"）。
-    default: ""
+      既定値はこのプロジェクトの Free Edition ワークスペース。
+    default: "https://dbc-b1c4d17f-58d9.cloud.databricks.com"
   agent_secret_scope:
     description: >-
       gold_qa_agent の Model Serving エンドポイントに DATABRICKS_TOKEN を
