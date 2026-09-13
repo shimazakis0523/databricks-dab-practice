@@ -196,6 +196,25 @@ README を更新し忘れると CI が落ちる。
       確認するのが最も確実**。今後この種のエラーに遭遇したら、まず
       ユーザーに同様の introspection コードを実行してもらい、その結果を
       根拠に直すこと。
+    - **4つ目: `agents/gold_qa_agent.py` を `code_paths` 経由で import する
+      設計自体が壊れていた（`ModuleNotFoundError: No module named
+      'gold_qa_agent'`）。** 「models from code」パターンでは、mlflow が
+      モデルファイル（`gold_qa_responses_agent.py`）を解析する時点で
+      `code_paths=[AGENTS_DIR]` による sys.path 設定がまだ効いておらず、
+      トップレベルの `from gold_qa_agent import ...` が失敗する。登録時の
+      Notebook では、別の目的（gold の要約作成）で手動 `sys.path.insert`
+      済みだったために偶然動いてしまい、この問題は Model Serving への
+      実デプロイまで発覚しなかった（登録時の自動検証だけでは検知できない
+      環境差の一例）。根本原因は、`code_paths` の sys.path 設定タイミングを
+      検証せずに前提としてしまったこと。
+      **対策として、Serving コンテナで実行されるファイル
+      （`gold_qa_responses_agent.py`）を外部ファイル import に依存しない
+      自己完結な形にし、必要なロジックを `gold_qa_agent.py` から意図的に
+      複製した**（`rows_to_context` は登録 Notebook 専用のため複製して
+      いない）。mlflow の「models from code」パターンで python_model が
+      参照するファイルは、`code_paths` に頼るのではなく自己完結にするのが
+      最も確実、という教訓。ロジックを変更する際は両ファイルを両方
+      更新すること。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
   pytest テストする（`nyctaxi_pipeline.py` 自体は Databricks 実行環境でしか

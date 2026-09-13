@@ -5,9 +5,26 @@ gold テーブル（trips_daily_gold）の集計データを、登録時にス�
 Model API（OpenAI 互換エンドポイント）に問い合わせて回答を生成する。
 
 このモジュールは Databricks の Model Serving コンテナ（または mlflow>=3.1.0 /
-openai がインストールされたノートブック環境）でのみ動作確認できる。テスト可能な
-プロンプト構築ロジックは gold_qa_agent.py に切り出してあり、そちらは
-tests/test_gold_qa_agent.py でユニットテストする。
+openai がインストールされたノートブック環境）でのみ動作確認できる。
+
+**プロンプト構築ロジック（SYSTEM_PROMPT_TEMPLATE / build_system_prompt /
+build_messages）は gold_qa_agent.py と意図的に重複させている**（本来は
+`from gold_qa_agent import build_messages` として import する設計だったが、
+実際にワークスペースへデプロイしたところ
+`ModuleNotFoundError: No module named 'gold_qa_agent'` になった。
+「models from code」パターンでは、mlflow がこのファイルを解析する時点で
+`code_paths`（notebooks/register_gold_qa_agent.py の code_paths=[AGENTS_DIR]）
+による sys.path 設定がまだ効いておらず、登録時の Notebook では別の目的で
+手動 sys.path.insert 済みだったために偶然動いてしまい、この問題がデプロイ
+段階まで見逃されていた）。mlflow の code_paths の内部的な配置場所・
+タイミングに依存する外部ファイル import は壊れやすいと判断し、
+Serving コンテナで実行されるこのファイルは外部ファイルに一切依存しない
+自己完結した形にした。**ロジックを変更する場合は gold_qa_agent.py と
+両方を同じ内容に更新すること**（gold_qa_agent.py 側は
+tests/test_gold_qa_agent.py でユニットテストする; このファイル側は
+ワークスペースでの実デプロイでしか動作確認できない）。
+`rows_to_context` は登録 Notebook 側でのみ使うため、gold_qa_agent.py に
+残したまま複製していない。
 
 「models from code」パターンでログする前提のため、このファイルの末尾で
 `mlflow.models.set_model(...)` を呼び出す（notebooks/register_gold_qa_agent.py
@@ -21,7 +38,30 @@ from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import ResponsesAgentRequest, ResponsesAgentResponse
 from openai import OpenAI
 
-from gold_qa_agent import build_messages
+# gold_qa_agent.py の SYSTEM_PROMPT_TEMPLATE / build_system_prompt /
+# build_messages と同一内容（意図的な重複。理由は上記モジュール docstring 参照）。
+GOLD_TABLE = "workspace.nyctaxi.trips_daily_gold"
+
+SYSTEM_PROMPT_TEMPLATE = """あなたは NYC タクシーの日次集計データ（{table}）を
+分析するアシスタントです。以下はピックアップ ZIP コード別の集計データです。
+ユーザーの質問に、このデータの範囲内で日本語で簡潔に答えてください。
+データに無い情報は推測せず「データからはわかりません」と答えてください。
+
+集計データ:
+{context}
+"""
+
+
+def build_system_prompt(context: str) -> str:
+    return SYSTEM_PROMPT_TEMPLATE.format(table=GOLD_TABLE, context=context)
+
+
+def build_messages(question: str, context: str) -> list[dict]:
+    return [
+        {"role": "system", "content": build_system_prompt(context)},
+        {"role": "user", "content": question},
+    ]
+
 
 # 基盤モデル（Foundation Model API）のエンドポイント名。Databricks が
 # ワークスペース間で提供する pay-per-token のシステムエンドポイント名だが、

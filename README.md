@@ -519,6 +519,20 @@ mlflow の非公開/未文書な API は、ドキュメントや他リポジト�
 信じるより、実際にインストールされたパッケージをワークスペースで
 introspection するのが最も確実（CLAUDE.md 参照）。
 
+最後に、Model Serving エンドポイントの作成自体が
+`Failed to deploy gold_qa_agent-1: Model failed to load due to a missing
+Python dependency`（実際のエラーは `ModuleNotFoundError: No module named
+'gold_qa_agent'`）で失敗した。原因は「models from code」パターンで、
+mlflow が `gold_qa_responses_agent.py` を解析する時点では
+`code_paths=[AGENTS_DIR]` による sys.path 設定がまだ効いておらず、
+トップレベルの `from gold_qa_agent import ...` が失敗すること。登録時の
+Notebook では別の目的で手動 `sys.path.insert` 済みだったため偶然動いて
+しまい、登録は成功したのに Serving デプロイでは失敗するという形で発覚が
+遅れた。対策として、Serving コンテナで実行される
+`agents/gold_qa_responses_agent.py` を外部ファイル import に依存しない
+自己完結な形に変更し（`gold_qa_agent.py` のロジックを意図的に複製）、
+`code_paths` の内部的な配置場所・タイミングに依存しないようにした。
+
 ## 組織/権限管理（ロールベースアクセス）
 
 「組織のロール構成をコードで再現する」ことを検証するパートです。
