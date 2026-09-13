@@ -23,7 +23,7 @@ variables:
       Model Serving に配信する gold_qa_agent の Unity Catalog モデルバージョン。
       notebooks/register_gold_qa_agent.py を実行するたびに新しいバージョンが
       登録されるため、実行後に表示される Version の値へ更新して再デプロイする。
-    default: "1"
+    default: "2"
   agent_databricks_host:
     description: >-
       gold_qa_agent の Model Serving エンドポイントが、Databricks の
