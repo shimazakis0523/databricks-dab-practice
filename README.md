@@ -25,6 +25,7 @@ GitHub への push だけで検証環境にデプロイまで到達させる」�
 | 12 | gold テーブルの BI ダッシュボードを DAB リソースとして宣言的に管理 | `resources/nyctaxi_dashboard.yml`, `dashboards/nyctaxi_gold_dashboard.lvdash.json` |
 | 13 | 環境（ワークスペース）依存の値をコードに直書きせず変数/環境変数へ外だしし、別環境への移植性を担保 | `databricks.yml`（`variables.warehouse_id`）, `tests/test_no_hardcoded_workspace_values.py` |
 | 14 | gold テーブルを参照する GenAI エージェントを MLflow ResponsesAgent として実装し、Model Serving で配信 | `agents/gold_qa_responses_agent.py`, `resources/gold_qa_agent_serving.yml` |
+| 15 | Model Serving エンドポイントを呼び出す簡易 UI を Databricks Apps（Streamlit）として DAB リソースで管理 | `resources/gold_qa_streamlit_app.yml`, `apps/gold_qa_streamlit/app.py` |
 
 ## 全体構成図
 
@@ -63,6 +64,7 @@ flowchart TB
         RegJob["Job: gold_qa_agent_registration_job\n(手動実行)\ngold を要約し MLflow に登録"]
         AgentServing["Model Serving: gold_qa_agent\n(ResponsesAgent)"]
         FMAPI["Foundation Model API\n(pay-per-token)"]
+        StreamlitApp["Databricks App: gold-qa-streamlit\n(Streamlit UI)"]
     end
 
     Push --> Test
@@ -77,6 +79,7 @@ flowchart TB
     Gold -->|"集計データを登録時に取得"| RegJob
     RegJob -->|"モデル登録 (Unity Catalog)"| AgentServing
     AgentServing -->|"OpenAI 互換 API"| FMAPI
+    StreamlitApp -->|"databricks_openai\nresponses.create"| AgentServing
 ```
 
 ### データの流れ（実行時）
@@ -115,7 +118,8 @@ flowchart TB
 │   ├── groups.json                 # ワークスペースグループと entitlements の一覧
 │   ├── nyctaxi_dashboard.yml       # gold テーブルの BI ダッシュボード定義
 │   ├── gold_qa_agent_job.yml       # Job 定義（gold_qa_agent の登録、手動実行用）
-│   └── gold_qa_agent_serving.yml   # Model Serving エンドポイント定義（gold_qa_agent）
+│   ├── gold_qa_agent_serving.yml   # Model Serving エンドポイント定義（gold_qa_agent）
+│   └── gold_qa_streamlit_app.yml   # Databricks App 定義（gold_qa_agent を呼ぶ Streamlit UI）
 ├── templates/
 │   └── gold_qa_agent_serving.yml   # 上記と同内容のテンプレート（未ブートストラップのワークスペース向け。詳細は「GenAI エージェント」参照）
 ├── dashboards/
@@ -123,6 +127,11 @@ flowchart TB
 ├── agents/
 │   ├── gold_qa_agent.py            # プロンプト構築ロジック本体（純粋関数、pytest でテスト可能）
 │   └── gold_qa_responses_agent.py  # MLflow ResponsesAgent 実装（Databricks 実行環境依存）
+├── apps/
+│   └── gold_qa_streamlit/
+│       ├── app.py                 # gold_qa_agent を呼ぶ Streamlit アプリ本体
+│       ├── app.yaml               # Databricks Apps 実行設定（起動コマンド・環境変数）
+│       └── requirements.txt       # streamlit, databricks-openai
 ├── scripts/
 │   ├── scim_client.py               # SCIM API 共通ヘルパー（他の scripts/*.py から import）
 │   ├── ensure_groups.py             # groups.json のグループ作成・entitlements 同期（CI から実行）
@@ -158,6 +167,8 @@ flowchart TB
 - Model Serving エンドポイント: `gold_qa_agent` — 登録した `gold_qa_agent` を配信する
   （`resources/gold_qa_agent_serving.yml`。モデル登録前は `templates/` に
   置いてブートストラップする運用だった。詳細は「GenAI エージェント」参照）
+- Databricks App: `gold-qa-streamlit` — `gold_qa_agent` エンドポイントに質問できる
+  簡易 Streamlit UI（`resources/gold_qa_streamlit_app.yml`）
 - Free Edition はサーバーレスコンピュートのみ利用できるため、クラスタ定義は含めていません
 
 ## データパイプライン（nyctaxi_pipeline）
@@ -539,6 +550,32 @@ Notebook では別の目的で手動 `sys.path.insert` 済みだったため偶�
 渡していたが、`ResponsesAgentResponse` 自体のトップレベルにも `id` が
 必須だったことを見落としていた。`ResponsesAgentResponse(output=[...],
 id=response.id)` として修正済み。
+
+## Streamlit UI（gold-qa-streamlit）
+
+`gold_qa_agent`（Model Serving エンドポイント）に日本語で質問できる、
+Databricks App 上の簡易 Streamlit 画面です。
+
+- `resources/gold_qa_streamlit_app.yml` — `resources.apps.gold_qa_streamlit_app`
+  として App を定義。`resources[].serving_endpoint` で
+  `gold_qa_agent_endpoint`（同一バンドル内リソース参照）への
+  `CAN_QUERY` 権限を App のサービスプリンシパルに付与する。
+- `apps/gold_qa_streamlit/app.py` — `databricks_openai.DatabricksOpenAI` 経由で
+  `client.responses.create(model=<endpoint名>, input=[...])` を呼び出す
+  Streamlit アプリ本体。
+- `apps/gold_qa_streamlit/app.yaml` — App の起動コマンドと環境変数
+  （`SERVING_ENDPOINT` は `resources[].name` から `valueFrom` で注入される）。
+- `apps/gold_qa_streamlit/requirements.txt` — `streamlit` / `databricks-openai`。
+
+GenAI エージェント自体（`gold_qa_agent_serving.yml`）と異なり、この App では
+シークレットスコープの作成など追加の手動セットアップは不要です。認証は
+Databricks Apps のランタイムが自動的に処理し（App のサービスプリンシパルに
+対して上記 `serving_endpoint` の権限を付与しているだけで、コード側で
+トークンを扱う必要はない）、`databricks bundle deploy` 実行時に自動で
+デプロイされます。
+
+デプロイ後は、ワークスペースの左サイドバー「Apps」から `gold-qa-streamlit`
+を開くと利用できます（起動まで数分かかることがあります）。
 
 ## 組織/権限管理（ロールベースアクセス）
 

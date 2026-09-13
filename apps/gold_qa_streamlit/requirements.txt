@@ -1,0 +1,2 @@
+streamlit
+databricks-openai>=0.17.0

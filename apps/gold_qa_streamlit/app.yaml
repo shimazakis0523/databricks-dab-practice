@@ -1,0 +1,11 @@
+command:
+  - "streamlit"
+  - "run"
+  - "app.py"
+env:
+  # resources/gold_qa_streamlit_app.yml の app resources の name（"gold_qa_agent"）
+  # から、実際にデプロイされている Model Serving エンドポイント名が渡される。
+  - name: "SERVING_ENDPOINT"
+    valueFrom: "gold_qa_agent"
+  - name: "STREAMLIT_BROWSER_GATHER_USAGE_STATS"
+    value: "false"

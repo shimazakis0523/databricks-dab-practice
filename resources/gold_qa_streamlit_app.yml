@@ -1,0 +1,15 @@
+resources:
+  apps:
+    gold_qa_streamlit_app:
+      name: "gold-qa-streamlit"
+      source_code_path: ../apps/gold_qa_streamlit
+      description: "gold_qa_agent（Model Serving）に質問できる簡易 Streamlit UI"
+      resources:
+        - name: "gold_qa_agent"
+          description: "gold_qa_agent の Model Serving エンドポイント"
+          serving_endpoint:
+            # 同じバンドル内で既にデプロイ済みの resources.model_serving_endpoints
+            # を動的参照する（Unity Catalog 上の未登録モデルを参照する場合と違い、
+            # 同一バンドル内のリソース参照はデプロイ順序が解決されるため問題ない）。
+            name: ${resources.model_serving_endpoints.gold_qa_agent_endpoint.name}
+            permission: "CAN_QUERY"

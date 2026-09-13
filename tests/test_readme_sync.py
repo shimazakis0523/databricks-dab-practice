@@ -2,9 +2,9 @@
 
 構成変更・機能拡張のたびに README.md の更新を忘れる、という事故の
 一次検知用。`resources/*.yml` / `pipelines/*.py` / `notebooks/*.py` /
-`tests/*.py` / `scripts/*.py` / `dashboards/*.json` のファイル名が
-README.md 本文のどこかに出現しているかだけを確認する簡易チェックであり、
-記述内容の正しさまでは保証しない。
+`tests/*.py` / `scripts/*.py` / `dashboards/*.json` / `apps/**/*.py` の
+ファイル名が README.md 本文のどこかに出現しているかだけを確認する
+簡易チェックであり、記述内容の正しさまでは保証しない。
 
 このテストが落ちたら、CLAUDE.md の指示どおり README.md の
 「構成」ツリー・POC 表・アーキテクチャ図などを見直すこと。
@@ -24,6 +24,7 @@ TRACKED_GLOBS = [
     "tests/*.py",
     "scripts/*.py",
     "dashboards/*.json",
+    "apps/**/*.py",
 ]
 
 
