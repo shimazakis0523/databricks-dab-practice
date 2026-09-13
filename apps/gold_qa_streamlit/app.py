@@ -19,9 +19,10 @@ st.set_page_config(page_title="gold_qa_agent", layout="centered")
 st.title("NYC タクシー gold データ Q&A")
 st.caption(f"Serving endpoint: {SERVING_ENDPOINT}")
 
-question = st.text_input(
+question = st.text_area(
     "trips_daily_gold の集計データについて質問してください",
     value="トリップ数が一番多い ZIP はどこですか？",
+    height=240,
 )
 
 if st.button("質問する") and question:
