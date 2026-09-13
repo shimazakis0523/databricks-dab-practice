@@ -163,6 +163,23 @@ README を更新し忘れると CI が落ちる。
       テストでは検知しにくい（mlflow 自体がテスト環境に無いため）ので、
       「登録時に必ず一度 predict() が実際に呼ばれる」という上記の性質を
       実質的なハーネスとして頼ることにする。
+    - **3つ目: `ResponsesAgentResponse.from_chat_completion(response)` という
+      変換ヘルパーが存在しない（`AttributeError: from_chat_completion`）。**
+      これも参考実装をそのまま踏襲していたが、実際にインストールされている
+      `mlflow==3.8.1` にはこのメソッドが無かった。**推測や他リポジトリの
+      コードではなく、ワークスペースの Notebook で
+      `inspect.signature(...)` / `dir(...)` により実際のクラスを
+      直接調べて確認した**うえで、`ResponsesAgent.create_text_output_item(text, id)`
+      （実在確認済み）で出力アイテムを組み立て、
+      `ResponsesAgentResponse(output=[...])` を構築する形に直した。
+      同じ「参考実装が今のバージョンと合っていない」という根本原因が
+      3回連続で顕在化したことになる。**Lakeview のときと同様、mlflow の
+      非公開/未文書な API 表面（特にヘルパーメソッドの有無）は、
+      ドキュメントや他リポジトリのコードではなく、実際にインストールされた
+      パッケージを Notebook 上で `dir()` / `inspect.signature()` して
+      確認するのが最も確実**。今後この種のエラーに遭遇したら、まず
+      ユーザーに同様の introspection コードを実行してもらい、その結果を
+      根拠に直すこと。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
   pytest テストする（`nyctaxi_pipeline.py` 自体は Databricks 実行環境でしか

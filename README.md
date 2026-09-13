@@ -512,6 +512,17 @@ GitHub 上の実例で確認したうえで修正する）で対応する。
 バージョン向けかは分からないため、最終的にはワークスペースで実際に
 実行して確認する必要がある、という教訓（CLAUDE.md 参照）。
 
+さらにその直後、`ResponsesAgentResponse.from_chat_completion(response)` が
+`AttributeError: from_chat_completion` で失敗した。これも参考実装を
+踏襲していたが、実際にインストールされている `mlflow==3.8.1` にこの
+ヘルパーは存在しなかった。今回はワークスペースの Notebook で
+`dir(ResponsesAgentResponse)` / `inspect.signature(...)` により実際の
+クラスを直接確認し、`ResponsesAgent.create_text_output_item(text, id)`
+（実在確認済み）で出力アイテムを組み立てる形に修正した。
+mlflow の非公開/未文書な API は、ドキュメントや他リポジトリのコードを
+信じるより、実際にインストールされたパッケージをワークスペースで
+introspection するのが最も確実（CLAUDE.md 参照）。
+
 ## 組織/権限管理（ロールベースアクセス）
 
 「組織のロール構成をコードで再現する」ことを検証するパートです。

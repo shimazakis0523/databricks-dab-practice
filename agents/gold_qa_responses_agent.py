@@ -57,8 +57,16 @@ class GoldQAResponsesAgent(ResponsesAgent):
         messages = build_messages(question, self.gold_context)
 
         response = self.client.chat.completions.create(model=self.model, messages=messages)
+        answer = response.choices[0].message.content
 
-        return ResponsesAgentResponse.from_chat_completion(response)
+        # ResponsesAgentResponse に from_chat_completion のような変換
+        # ヘルパーは存在しない（実際にワークスペースで実行して
+        # `AttributeError: from_chat_completion` になったため判明した）。
+        # 代わりに ResponsesAgent 自身が提供する create_text_output_item
+        # （インストール済み mlflow==3.8.1 で実在を確認済み）でテキスト出力
+        # アイテムを組み立て、output に渡す。
+        output_item = self.create_text_output_item(text=answer, id=response.id)
+        return ResponsesAgentResponse(output=[output_item])
 
 
 mlflow.models.set_model(GoldQAResponsesAgent())
