@@ -533,6 +533,13 @@ Notebook では別の目的で手動 `sys.path.insert` 済みだったため偶�
 自己完結な形に変更し（`gold_qa_agent.py` のロジックを意図的に複製）、
 `code_paths` の内部的な配置場所・タイミングに依存しないようにした。
 
+修正後、Serving は起動したものの、Playground から呼び出すと
+`"id is a required field"`（`ResponsesResponseSchema` のスキーマ検証エラー）
+になった。`create_text_output_item` で個々の出力アイテムには `id` を
+渡していたが、`ResponsesAgentResponse` 自体のトップレベルにも `id` が
+必須だったことを見落としていた。`ResponsesAgentResponse(output=[...],
+id=response.id)` として修正済み。
+
 ## 組織/権限管理（ロールベースアクセス）
 
 「組織のロール構成をコードで再現する」ことを検証するパートです。

@@ -106,7 +106,10 @@ class GoldQAResponsesAgent(ResponsesAgent):
         # （インストール済み mlflow==3.8.1 で実在を確認済み）でテキスト出力
         # アイテムを組み立て、output に渡す。
         output_item = self.create_text_output_item(text=answer, id=response.id)
-        return ResponsesAgentResponse(output=[output_item])
+        # ResponsesAgentResponse 自体にもトップレベルの id が必須（Responses API
+        # の仕様）。省略すると実ワークスペースで Playground/API 呼び出し時に
+        # "id is a required field" のスキーマ検証エラーになったため判明した。
+        return ResponsesAgentResponse(output=[output_item], id=response.id)
 
 
 mlflow.models.set_model(GoldQAResponsesAgent())

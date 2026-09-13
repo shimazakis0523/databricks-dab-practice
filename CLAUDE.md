@@ -215,6 +215,18 @@ README を更新し忘れると CI が落ちる。
       参照するファイルは、`code_paths` に頼るのではなく自己完結にするのが
       最も確実、という教訓。ロジックを変更する際は両ファイルを両方
       更新すること。
+    - **5つ目: `ResponsesAgentResponse` のトップレベル `id` フィールドが
+      未設定だった（Playground/API 呼び出し時に "id is a required field"
+      のスキーマ検証エラー）。** `create_text_output_item` で個々の出力
+      アイテムには `id` を渡していたが、レスポンス全体（Responses API
+      仕様上のトップレベルオブジェクト）にも `id` が必須ということを
+      見落としていた。`ResponsesAgentResponse(output=[...], id=...)` として
+      修正。この一連の gold_qa_agent 実装（4回連続の live デバッグ）から
+      得られる一般教訓: **mlflow の ResponsesAgent のような、外部 API 仕様
+      （OpenAI Responses API）に準拠しつつ mlflow 独自の型でラップされている
+      インターフェースは、必須フィールドの一部だけをドキュメント/参考実装
+      から拾うと漏れが起きやすい。実際に Playground などで呼び出して
+      レスポンスの検証結果を確認するまで、フィールドの過不足に気づけない**。
 - パイプラインの変換ロジックは `dlt` に依存しない純粋関数として
   `pipelines/transforms.py` に切り出し、`tests/test_transforms.py` で
   pytest テストする（`nyctaxi_pipeline.py` 自体は Databricks 実行環境でしか
